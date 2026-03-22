@@ -1,0 +1,39 @@
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace BPFL.API.Models
+{
+    public class Match
+    {
+        public int Id { get; set; }
+
+        public int ExternalId { get; set; }
+
+        [Required]
+        public int HomeTeamId { get; set; }
+
+        [Required]
+        public int AwayTeamId { get; set; } 
+
+        [Required]
+        public DateTime MatchDate { get; set; }
+
+        public int? HomeScore { get; set; }
+
+        public int? AwayScore { get; set; }
+
+        public int? MatchDay { get; set; }
+
+        public string Status { get; set; } = null!;
+
+       public List<Prediction?> Predictions { get; set; } = new List<Prediction?>();
+
+        [Required]
+        public Team HomeTeam { get; set; } = null!;
+
+        [Required]
+        public Team AwayTeam { get; set; } = null!;
+
+       
+
+    }
+}

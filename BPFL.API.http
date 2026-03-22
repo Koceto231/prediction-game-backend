@@ -1,0 +1,6 @@
+@BPFL.API_HostAddress = http://localhost:5193
+
+GET {{BPFL.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
