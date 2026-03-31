@@ -40,9 +40,6 @@ namespace BPFL.API.Services.External
 
                 var content = await response.Content.ReadAsStringAsync(ct);
 
-                Console.WriteLine("RAW API RESPONSE:");
-                Console.WriteLine(content);
-
                 var result = JsonSerializer.Deserialize<T>(content,
                     new JsonSerializerOptions
                     {

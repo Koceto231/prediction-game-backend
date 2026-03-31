@@ -2,8 +2,8 @@
 {
     public class CombinedPredictionResponseDTO
     {
-        public AIPredictionResponseDTO AIPredictionResponseDTO { get; set; }
+        public AIPredictionResponseDTO AIPredictionResponseDTO { get; set; } = null!;
 
-        public PredictionResponseDTO PredictionResponseDTO { get; set; }
+        public PredictionResponseDTO PredictionResponseDTO { get; set; } = null!;
     }
 }

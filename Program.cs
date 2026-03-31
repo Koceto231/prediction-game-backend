@@ -1,3 +1,4 @@
+using BPFL.API.BackgroundJobs;
 using BPFL.API.Data;
 using BPFL.API.Middleware;
 using BPFL.API.Services;
@@ -7,6 +8,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,11 +47,37 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("https://localhost:5173")
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+             .AllowCredentials();
     });
 });
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+});
+
+
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+
 
 // Add services to the container.
 builder.Services.AddScoped<AuthServices>();
@@ -61,7 +92,12 @@ builder.Services.AddScoped<PredictionScoringService>();
 builder.Services.AddScoped<AIPredictionService>();
 builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<LeagueService>();
+builder.Services.AddScoped<GoogleAuthService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<ProfileService>();
 
+builder.Services.AddHostedService<MatchSyncJob>();
+builder.Services.AddHostedService<PredictionScoringJob>();
 
 builder.Services.AddControllers();
 
@@ -100,7 +136,8 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 
-
+app.UseRouting();
+app.UseRateLimiter();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

@@ -59,7 +59,7 @@ namespace BPFL.API.Middleware
                 ScoringException scoringException => scoringException.ErrorType switch
                 {
                     ScoringErrorType.MatchNotFound => (int)HttpStatusCode.NotFound,
-                    ScoringErrorType.MatchNotFinshed => (int)HttpStatusCode.Conflict,
+                    ScoringErrorType.MatchNotFinished => (int)HttpStatusCode.Conflict,
                     ScoringErrorType.ScoreNotAvailable => (int)HttpStatusCode.Conflict,
                     _ => (int)HttpStatusCode.BadRequest
                 },

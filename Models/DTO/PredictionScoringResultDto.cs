@@ -4,6 +4,6 @@
     {
         public int MatchId { get; set; }
 
-        public int ScoredOredictionsCount { get; set; }
+        public int ScoredPredictionsCount { get; set; }
     }
 }

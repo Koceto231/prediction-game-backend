@@ -48,7 +48,7 @@ namespace BPFL.API.Services
         {
            take = Math.Clamp(take, 1, 100);
 
-            return await GetMatches().Where(m => m.MatchDate >= DateTime.UtcNow && m.Status != "FINISHED")
+            return await GetMatches().Where(m => m.MatchDate >= DateTime.Now && m.Status != "FINISHED")
            .OrderBy(m => m.MatchDate)
            .Take(take).ToListAsync(ct);
         }

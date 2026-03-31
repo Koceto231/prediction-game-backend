@@ -38,63 +38,106 @@ namespace BPFL.API.Services
             _logger = logger;
         }
 
-        public async Task<CombinedPredictionResponseDTO> CreatePredictionAsync(int id, CreatePredictionDTO createPredictionDTO, CancellationToken ct = default)
+        public async Task<CombinedPredictionResponseDTO> CreatePredictionAsync(int userId,CreatePredictionDTO createPredictionDTO,
+                         CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(createPredictionDTO);
 
-            ValidateUserId(id);
-            ValidateScores(createPredictionDTO.PredictionHomeScore, createPredictionDTO.PredictionAwayScore);
+            ValidateUserId(userId);
+            ValidatePredictionInput(createPredictionDTO);
+
             var match = await GetMatchWithTeamsAsync(createPredictionDTO.MatchId, ct);
             ValidateMatchNotStarted(match);
-            await ValidateNoPreviousPredictionAsync(id, match.Id, ct);
+            await ValidateNoPreviousPredictionAsync(userId, match.Id, ct);
 
+            var newPrediction = new Prediction
+            {
+                UserId = userId,
+                MatchId = createPredictionDTO.MatchId,
+                PredictionHomeScore = createPredictionDTO.PredictionHomeScore,
+                PredictionAwayScore = createPredictionDTO.PredictionAwayScore,
+                PredictionWinner = createPredictionDTO.PredictionWinner,
+                PredictionBTTS = createPredictionDTO.PredictionBTTS,
+                PredictionOULine = createPredictionDTO.PredictionOULine,
+                PredictionOUPick = createPredictionDTO.PredictionOUPick,
+                CreatedAt = DateTime.UtcNow
+            };
 
-
-                var newPrediction = new Prediction
-                {
-                    UserId = id,
-                    MatchId = createPredictionDTO.MatchId,
-                    PredictionHomeScore = createPredictionDTO.PredictionHomeScore,
-                    PredictionAwayScore = createPredictionDTO.PredictionAwayScore,
-                    CreatedAt = DateTime.UtcNow,
-
-                };
-
-                bPFL_DBContext.Add(newPrediction);
-                await bPFL_DBContext.SaveChangesAsync(ct);
+            bPFL_DBContext.Predictions.Add(newPrediction);
+            await bPFL_DBContext.SaveChangesAsync(ct);
 
             _logger.LogInformation(
                 "Prediction created: UserId={UserId}, MatchId={MatchId}, Score={Home}-{Away}",
-                id, match.Id, createPredictionDTO.PredictionHomeScore, createPredictionDTO.PredictionAwayScore);
+                userId, match.Id, newPrediction.PredictionHomeScore, newPrediction.PredictionAwayScore);
 
+            return await BuildCombinedPredictionResponseAsync(newPrediction, match, ct);
+        }
 
-            var matchAnalyse = await matchAnalysisService.AnalyzeMatch(match,ct);
+        public async Task<CombinedPredictionResponseDTO> UpdatePredictionAsync(
+            int matchId,
+            int userId,
+            CreatePredictionDTO createPredictionDTO,
+            CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(createPredictionDTO);
 
-            var predictionModel = predictionModelService.BuildModel(matchAnalyse);
+            ValidateUserId(userId);
+            ValidatePredictionInput(createPredictionDTO);
 
-            var aiPrediction = aIPredictionService.AIBuildPrediction(matchAnalyse, predictionModel);
+            var prediction = await bPFL_DBContext.Predictions
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.MatchId == matchId, ct);
 
-
-            var HumanPrediction = new PredictionResponseDTO
+            if (prediction == null)
             {
-                Id = newPrediction.Id,
-                MatchId = newPrediction.MatchId,
+                throw new PredictionException(
+                    "Prediction not found",
+                    PredictionErrorType.PredictionNotFound);
+            }
+
+            var match = await GetMatchWithTeamsAsync(matchId, ct);
+            ValidateMatchNotStarted(match);
+
+            prediction.PredictionHomeScore = createPredictionDTO.PredictionHomeScore;
+            prediction.PredictionAwayScore = createPredictionDTO.PredictionAwayScore;
+            prediction.PredictionWinner = createPredictionDTO.PredictionWinner;
+            prediction.PredictionBTTS = createPredictionDTO.PredictionBTTS;
+            prediction.PredictionOULine = createPredictionDTO.PredictionOULine;
+            prediction.PredictionOUPick = createPredictionDTO.PredictionOUPick;
+
+            await bPFL_DBContext.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Prediction updated: UserId={UserId}, MatchId={MatchId}, Score={Home}-{Away}",
+                userId, matchId, prediction.PredictionHomeScore, prediction.PredictionAwayScore);
+
+            return await BuildCombinedPredictionResponseAsync(prediction, match, ct);
+        }
+
+        private async Task<CombinedPredictionResponseDTO> BuildCombinedPredictionResponseAsync(
+            Prediction prediction,
+            Match match,
+            CancellationToken ct = default)
+        {
+            var matchAnalysis = await matchAnalysisService.AnalyzeMatch(match, ct);
+            var predictionModel = predictionModelService.BuildModel(matchAnalysis);
+            var aiPrediction = aIPredictionService.AIBuildPrediction(matchAnalysis, predictionModel);
+
+            var userPrediction = new PredictionResponseDTO
+            {
+                Id = prediction.Id,
+                MatchId = prediction.MatchId,
                 HomeTeam = match.HomeTeam.Name,
                 AwayTeam = match.AwayTeam.Name,
-                PredictedHomeScore = newPrediction.PredictionHomeScore,
-                PredictedAwayScore = newPrediction.PredictionAwayScore,
-                CreatedAt = newPrediction.CreatedAt,
+                PredictedHomeScore = prediction.PredictionHomeScore,
+                PredictedAwayScore = prediction.PredictionAwayScore,
+                CreatedAt = prediction.CreatedAt
             };
-
-
 
             return new CombinedPredictionResponseDTO
             {
-                PredictionResponseDTO = HumanPrediction,
+                PredictionResponseDTO = userPrediction,
                 AIPredictionResponseDTO = aiPrediction
-
             };
-           
         }
 
         public async Task<List<PredictionResponseDTO>> GetMyPredictionsAsync(int userId, CancellationToken ct = default)
@@ -108,9 +151,17 @@ namespace BPFL.API.Services
                    MatchId = k.MatchId,
                    HomeTeam = k.Match.HomeTeam.Name,
                    AwayTeam = k.Match.AwayTeam.Name,
+
                    PredictedHomeScore = k.PredictionHomeScore,
                    PredictedAwayScore = k.PredictionAwayScore,
-                   CreatedAt = k.CreatedAt
+
+                    PredictionWinner = k.PredictionWinner,
+                    PredictionBTTS = k.PredictionBTTS,
+                    PredictionOULine = k.PredictionOULine,
+                    PredictionOUPick = k.PredictionOUPick,
+
+                    Points = k.Points,
+                    CreatedAt = k.CreatedAt
                 }).
                 ToListAsync(ct);
 
@@ -118,61 +169,7 @@ namespace BPFL.API.Services
         }
 
         
-        public async Task<CombinedPredictionResponseDTO> UpdatePrediction(int matchId, int userId, CreatePredictionDTO createPredictionDTO, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(createPredictionDTO);
-            ValidateUserId(userId);
-            ValidateScores(createPredictionDTO.PredictionHomeScore, createPredictionDTO.PredictionAwayScore);
-
-            var prediction = await bPFL_DBContext.Predictions.FirstOrDefaultAsync(x => x.UserId == userId && x.MatchId == matchId,ct);
-
-            if (prediction == null)
-            {
-                throw new PredictionException(
-                    "Prediction not found",
-                    PredictionErrorType.PredictionNotFound);
-            }
-
-            var match = await GetMatchWithTeamsAsync(matchId, ct);
-            ValidateMatchNotStarted(match);
-
-            int newHomeScorePrediction = createPredictionDTO.PredictionHomeScore;
-            int newAwayScorePrediction = createPredictionDTO.PredictionAwayScore;
-
-   
-
-            prediction.PredictionHomeScore = newHomeScorePrediction;
-            prediction.PredictionAwayScore = newAwayScorePrediction;
-
-            await bPFL_DBContext.SaveChangesAsync(ct);
-
-            var matchAnalyse = await matchAnalysisService.AnalyzeMatch(match, ct);
-
-            var predictionModel = predictionModelService.BuildModel(matchAnalyse);
-
-            var aiPrediction = aIPredictionService.AIBuildPrediction(matchAnalyse, predictionModel);
-
-            var userPrediction = new PredictionResponseDTO
-            {
-                Id = prediction.Id,
-                MatchId = matchId,
-                HomeTeam = match.HomeTeam.Name,
-                AwayTeam = match.AwayTeam.Name,
-                PredictedHomeScore = newHomeScorePrediction,
-                PredictedAwayScore = newAwayScorePrediction,
-                CreatedAt = prediction.CreatedAt,
-
-
-            };
-          
-            var result = new CombinedPredictionResponseDTO 
-            { 
-                PredictionResponseDTO = userPrediction,
-                AIPredictionResponseDTO = aiPrediction
-            };
-
-            return result;
-        }
+       
 
         private async Task<Match> GetMatchWithTeamsAsync(int matchId, CancellationToken ct)
         {
@@ -218,20 +215,36 @@ namespace BPFL.API.Services
                 throw new ArgumentException("Invalid user ID", nameof(userId));
             }
         }
-        private static void ValidateScores(int homeScore, int awayScore)
+        private static void ValidatePredictionInput(CreatePredictionDTO createPredictionDTO)
         {
-            if (homeScore < 0 || awayScore < 0)
+            bool hasScore = createPredictionDTO.PredictionHomeScore.HasValue && createPredictionDTO.PredictionAwayScore.HasValue;
+            bool hasWinner = createPredictionDTO.PredictionWinner.HasValue;
+
+            if (!hasScore && !hasWinner)
             {
                 throw new PredictionException(
-                    "Scores cannot be negative",
-                    PredictionErrorType.InvalidInput);
+            "You must provide either a score prediction or a match winner.",
+            PredictionErrorType.InvalidInput);
             }
-            if (homeScore > 20 || awayScore > 20)
-            {
+
+            if (createPredictionDTO.PredictionHomeScore.HasValue != createPredictionDTO.PredictionAwayScore.HasValue)
                 throw new PredictionException(
-                    "Scores seem unrealistic",
+                    "Both home and away scores must be provided together.",
                     PredictionErrorType.InvalidInput);
+
+            if (hasScore)
+            {
+                if (createPredictionDTO.PredictionHomeScore < 0 || createPredictionDTO.PredictionAwayScore < 0)
+                    throw new PredictionException(
+                        "Scores cannot be negative.",
+                        PredictionErrorType.InvalidInput);
+
+                if (createPredictionDTO.PredictionHomeScore > 20 || createPredictionDTO.PredictionAwayScore > 20)
+                    throw new PredictionException(
+                        "Scores seem unrealistic.",
+                        PredictionErrorType.InvalidInput);
             }
+
         }
         private static void ValidateMatchNotStarted(Match match)
         {

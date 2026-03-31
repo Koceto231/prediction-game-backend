@@ -1,4 +1,6 @@
-﻿namespace BPFL.API.Models.DTO
+﻿using static BPFL.API.Models.Predictionenums;
+
+namespace BPFL.API.Models.DTO
 {
     public class PredictionResponseDTO
     {
@@ -13,6 +15,16 @@
         public string AwayTeam { get; set; } = null!;
 
         public int? PredictedAwayScore { get; set; }
+
+        public MatchWinner? PredictionWinner { get; set; }
+
+        public bool? PredictionBTTS { get; set; }
+
+        public OverUnderLine? PredictionOULine { get; set; }
+
+        public OverUnderPick? PredictionOUPick { get; set; }
+
+        public int? Points { get; set; }
 
         public DateTime CreatedAt { get; set; }
 

@@ -111,7 +111,7 @@ namespace BPFL.API.Controllers
 
             try
             {
-                var res = await predictionService.UpdatePrediction(matchId, userId, createPredictionDTO, ct);
+                var res = await predictionService.UpdatePredictionAsync(matchId, userId, createPredictionDTO, ct);
                 return Ok(res);
             }
             catch (PredictionException ex)

@@ -16,7 +16,7 @@ namespace BPFL.API.Exceptions
             return scoringErrorType switch
             {
                 ScoringErrorType.MatchNotFound => StatusCodes.Status404NotFound,
-                ScoringErrorType.MatchNotFinshed => StatusCodes.Status409Conflict,
+                ScoringErrorType.MatchNotFinished => StatusCodes.Status409Conflict,
                 ScoringErrorType.ScoreNotAvailable => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status400BadRequest,
             };

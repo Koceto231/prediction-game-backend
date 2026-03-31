@@ -4,6 +4,7 @@ using BPFL.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BPFL.API.Migrations
 {
     [DbContext(typeof(BPFL_DBContext))]
-    partial class BPFL_DBContextModelSnapshot : ModelSnapshot
+    [Migration("20260324122614_MakePasswordNullable")]
+    partial class MakePasswordNullable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -183,23 +186,8 @@ namespace BPFL.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<bool?>("ActualOUResult")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("ActualWinner")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BonusPointsOU")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("BonusPointsWinner")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool?>("IsCorrectBTTS")
-                        .HasColumnType("bit");
 
                     b.Property<int>("MatchId")
                         .HasColumnType("int");
@@ -207,25 +195,10 @@ namespace BPFL.API.Migrations
                     b.Property<int>("Points")
                         .HasColumnType("int");
 
-                    b.Property<int?>("PointsFromBTTS")
+                    b.Property<int>("PredictionAwayScore")
                         .HasColumnType("int");
 
-                    b.Property<int?>("PredictionAwayScore")
-                        .HasColumnType("int");
-
-                    b.Property<bool?>("PredictionBTTS")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("PredictionHomeScore")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PredictionOULine")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PredictionOUPick")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PredictionWinner")
+                    b.Property<int>("PredictionHomeScore")
                         .HasColumnType("int");
 
                     b.Property<int>("UserId")
@@ -252,33 +225,22 @@ namespace BPFL.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTime>("Expires")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2");
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
 
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("TokenHash")
+                    b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("UserId1")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
                     b.HasIndex("UserId");
-
-                    b.HasIndex("UserId1");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -322,28 +284,13 @@ namespace BPFL.API.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("EmailVerificationToken")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("EmailVerificationTokenExpires")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("GoogleId")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<bool>("IsEmailVerified")
-                        .HasColumnType("bit");
-
                     b.Property<string>("Password")
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PasswordResetToken")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("PasswordResetTokenExpires")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -355,9 +302,6 @@ namespace BPFL.API.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
 
                     b.HasIndex("GoogleId")
                         .IsUnique()
@@ -448,14 +392,10 @@ namespace BPFL.API.Migrations
             modelBuilder.Entity("BPFL.API.Models.RefreshToken", b =>
                 {
                     b.HasOne("BPFL.API.Models.User", "User")
-                        .WithMany()
+                        .WithMany("RefreshToken")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("BPFL.API.Models.User", null)
-                        .WithMany("RefreshTokens")
-                        .HasForeignKey("UserId1");
 
                     b.Navigation("User");
                 });
@@ -479,7 +419,7 @@ namespace BPFL.API.Migrations
                 {
                     b.Navigation("Predictions");
 
-                    b.Navigation("RefreshTokens");
+                    b.Navigation("RefreshToken");
                 });
 #pragma warning restore 612, 618
         }

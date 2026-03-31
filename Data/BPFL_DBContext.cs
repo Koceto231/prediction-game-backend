@@ -25,7 +25,10 @@ namespace BPFL.API.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-                modelBuilder.Entity<Match>()
+            modelBuilder.Entity<User>()
+    .HasIndex(u => u.Email)
+    .IsUnique();
+            modelBuilder.Entity<Match>()
                 .HasOne(m => m.HomeTeam)
                 .WithMany()
                 .HasForeignKey(m => m.HomeTeamId)
@@ -52,9 +55,14 @@ namespace BPFL.API.Data
                 .IsUnique();
 
             modelBuilder.Entity<RefreshToken>()
-                .HasOne(m => m.User)
-                .WithMany(k => k.RefreshToken)
-                .HasForeignKey(p => p.UserId);
+             .HasIndex(rt => rt.TokenHash)
+             .IsUnique();
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasOne(rt => rt.User)
+                .WithMany()
+                .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<League>(entity =>
             {
@@ -95,6 +103,13 @@ namespace BPFL.API.Data
                       .WithMany()
                       .HasForeignKey(e => e.UserId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.HasIndex(e => e.GoogleId)
+          .IsUnique()
+          .HasFilter("[GoogleId] IS NOT NULL");
             });
         }
 

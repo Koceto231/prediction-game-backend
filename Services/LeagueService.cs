@@ -16,6 +16,8 @@ namespace BPFL.API.Services
         NameRequired,
         CannotLeaveAsOwner
     }
+
+
     public class LeagueService
     {
         private readonly BPFL_DBContext _bPFL_DBContext;
