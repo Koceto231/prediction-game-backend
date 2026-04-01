@@ -67,7 +67,7 @@ namespace BPFL.API.Services.External
                    "Invalid JSON returned from external API.",
                     HttpStatusCode.BadGateway);
                 
-               // return Activator.CreateInstance<T>();
+               
             }
         }
         public async Task<CompetitionResponseDto> GetCompetions(CancellationToken ct)
