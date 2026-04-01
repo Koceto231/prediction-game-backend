@@ -104,8 +104,8 @@ builder.Services.AddScoped<GoogleAuthService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<ProfileService>();
 
-builder.Services.AddHostedService<MatchSyncJob>();
-builder.Services.AddHostedService<PredictionScoringJob>();
+//builder.Services.AddHostedService<MatchSyncJob>();
+//builder.Services.AddHostedService<PredictionScoringJob>();
 
 builder.Services.AddControllers();
 
