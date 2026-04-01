@@ -47,31 +47,43 @@ namespace BPFL.API.BackgroundJobs
         {
             logger.LogInformation("Match sync cycle started at {Time}", DateTime.UtcNow);
 
-            using var scopre = scopeFactory.CreateScope();
+            using var scope = scopeFactory.CreateScope();
 
-            var matchSync = scopre.ServiceProvider.GetRequiredService<MatchSyncService>();
+            var matchSync = scope.ServiceProvider.GetRequiredService<MatchSyncService>();
+            var teamSync = scope.ServiceProvider.GetRequiredService<TeamSyncService>();
 
             var leagueCodes = configuration
               .GetSection("BackgroundJobs:LeagueCodes")
               .Get<List<string>>() ?? new List<string> { "PL" };
 
-            foreach(var code in leagueCodes)
+            foreach (var code in leagueCodes)
             {
                 try
                 {
-                    var result = await matchSync.ImportMatchesAsync(code, ct);
+            
+                    var teamResult = await teamSync.ImportTeamAsync(code, ct);
+
+                    logger.LogInformation(
+                        "Team sync [{Code}] -> Added: {Added}, Updated: {Updated}",
+                        code,
+                        teamResult.Added,
+                        teamResult.Updated);
+
+           
+                    var matchResult = await matchSync.ImportMatchesAsync(code, ct);
 
                     logger.LogInformation(
                         "Match sync [{Code}] -> Added: {Added}, Updated: {Updated}",
                         code,
-                        result.Added,
-                        result.Updated);
+                        matchResult.Added,
+                        matchResult.Updated);
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Match sync failed for league {Code}", code);
                 }
             }
+
             logger.LogInformation("Match sync cycle completed at {Time}", DateTime.UtcNow);
         }
     }
