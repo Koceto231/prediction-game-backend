@@ -24,8 +24,14 @@ string token = builder.Configuration["FootballData:Token"]!;
 
 builder.Services.AddHttpClient<BPFLDataClient>(client =>
 {
-    client.BaseAddress = new Uri(baseUrl);
-    client.DefaultRequestHeaders.Add("X-Auth-Token", token);
+    client.BaseAddress = new Uri(builder.Configuration["FootballData:BaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(90);
+
+    var token = builder.Configuration["FootballData:Token"];
+    if (!string.IsNullOrWhiteSpace(token))
+    {
+        client.DefaultRequestHeaders.Add("X-Auth-Token", token);
+    }
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
