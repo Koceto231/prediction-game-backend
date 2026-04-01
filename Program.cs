@@ -21,6 +21,8 @@ options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnectio
 string baseUrl = builder.Configuration["FootballData:BaseUrl"]!;
 string token = builder.Configuration["FootballData:Token"]!;
 
+Console.WriteLine($"[DEBUG] BaseUrl: '{baseUrl}'");
+Console.WriteLine($"[DEBUG] Token set: {!string.IsNullOrWhiteSpace(token)}");
 
 builder.Services.AddHttpClient<BPFLDataClient>(client =>
 {
