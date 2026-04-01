@@ -55,7 +55,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("https://localhost:5173")
+        policy.WithOrigins("https://predictionfootabllgame.vercel.app")
               .AllowAnyHeader()
               .AllowAnyMethod()
              .AllowCredentials();
