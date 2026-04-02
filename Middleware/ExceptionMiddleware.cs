@@ -44,7 +44,7 @@ namespace BPFL.API.Middleware
                 ArgumentException => (int)HttpStatusCode.BadRequest,
                 UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
                 KeyNotFoundException => (int)HttpStatusCode.NotFound,
-                BPFLDataClientException => (int)HttpStatusCode.BadGateway,
+                BPFLDataClientException ex => (int)ex.StatusCode,
 
                 PredictionException predictionException => predictionException.ErrorType switch
                 {

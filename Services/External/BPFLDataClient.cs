@@ -69,6 +69,15 @@ namespace BPFL.API.Services.External
                 
                
             }
+            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Timeout while calling external API: {Endpoint}", endpoint);
+
+                throw new BPFLDataClientException(
+                    "External API timeout. The football data service is too slow or unavailable.",
+                    HttpStatusCode.GatewayTimeout
+                );
+            }
         }
         public async Task<CompetitionResponseDto> GetCompetions(CancellationToken ct)
         {
