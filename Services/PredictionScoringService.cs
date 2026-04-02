@@ -19,13 +19,16 @@ namespace BPFL.API.Services
     {
         private readonly BPFL_DBContext bPFL_DBContext;
         private readonly ILogger<PredictionScoringService> _logger;
+        private readonly LeaderboardService leaderboardService;
 
         public PredictionScoringService(
             BPFL_DBContext _bPFL_DBContext,
-            ILogger<PredictionScoringService> logger)
+            ILogger<PredictionScoringService> logger,
+            LeaderboardService _leaderboardService)
         {
             bPFL_DBContext = _bPFL_DBContext;
             _logger = logger;
+           leaderboardService = _leaderboardService;
         }
 
         public async Task<PredictionScoringResultDto> ScoreMatchPredictionsAsync(
@@ -129,6 +132,8 @@ namespace BPFL.API.Services
             }
 
             await bPFL_DBContext.SaveChangesAsync(ct);
+
+            leaderboardService.InvalidateLeaderboardCache();
 
             var result = new PredictionScoringResultDto
             {

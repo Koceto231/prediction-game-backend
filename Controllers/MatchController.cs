@@ -14,16 +14,19 @@ namespace BPFL.API.Controllers
             matchService = _matchService;
         }
         [HttpGet]
-        public async Task<IActionResult> GetAllMatches()
+        public async Task<IActionResult> GetAllMatches([FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            CancellationToken ct = default)
         {
-            var result = await matchService.GetAllAsync();
+            var result = await matchService.GetAllAsync(page, pageSize, ct);
             return Ok(result);
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetByIdMatch(int id)
+        public async Task<IActionResult> GetByIdMatch(int id,
+            CancellationToken ct = default)
         {
-            var result = await matchService.GetByIDMatch(id);
+            var result = await matchService.GetByIDMatch(id,ct);
             if (result == null)
             {
                 return NotFound();
@@ -32,16 +35,18 @@ namespace BPFL.API.Controllers
         }
 
         [HttpGet("team/{teamId:int}")]
-        public async Task<IActionResult> GetMatchesByTeamIdAsync(int teamId) 
+        public async Task<IActionResult> GetMatchesByTeamIdAsync(int teamId,
+            CancellationToken ct = default) 
         {
-            var result = await matchService.GetMatchesByTeamIdAsync(teamId);
+            var result = await matchService.GetMatchesByTeamIdAsync(teamId,ct);
             return Ok(result);
         }
 
         [HttpGet("upcoming")]
-        public async Task<IActionResult> GetFutureMatches([FromQuery] int take)
+        public async Task<IActionResult> GetFutureMatches([FromQuery] int take = 20,
+            CancellationToken ct = default)
         {
-            var result = await matchService.GetFutureMatches(take);
+            var result = await matchService.GetFutureMatches(take,ct);
 
             return Ok(result);
         }
