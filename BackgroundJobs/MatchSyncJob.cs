@@ -58,10 +58,20 @@ namespace BPFL.API.BackgroundJobs
 
             foreach (var code in leagueCodes)
             {
+
+                if (ct.IsCancellationRequested)
+                    return;
                 try
                 {
             
-                    var teamResult = await teamSync.ImportTeamAsync(code, ct);
+                    var teamTask =  teamSync.ImportTeamAsync(code, ct);
+                    var matchTask = matchSync.ImportMatchesAsync(code, ct);
+
+                    await Task.WhenAll(teamTask, matchTask);
+
+                    var teamResult = teamTask.Result;
+                    var matchResult = matchTask.Result;
+
 
                     logger.LogInformation(
                         "Team sync [{Code}] -> Added: {Added}, Updated: {Updated}",
@@ -70,7 +80,7 @@ namespace BPFL.API.BackgroundJobs
                         teamResult.Updated);
 
            
-                    var matchResult = await matchSync.ImportMatchesAsync(code, ct);
+                  
 
                     logger.LogInformation(
                         "Match sync [{Code}] -> Added: {Added}, Updated: {Updated}",

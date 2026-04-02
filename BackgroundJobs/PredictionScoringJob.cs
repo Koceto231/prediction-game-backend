@@ -11,7 +11,7 @@ namespace BPFL.API.BackgroundJobs
         private readonly IConfiguration configuration;
 
         private TimeSpan SyncInterval =>
-          TimeSpan.FromMinutes(configuration.GetValue<double>("BackgroundJobs:MatchSyncIntervalMinutes", 15));
+     TimeSpan.FromMinutes(configuration.GetValue<double>("BackgroundJobs:MatchSyncIntervalMinutes", 2));
         public PredictionScoringJob(IServiceScopeFactory _scopeFactory, ILogger<PredictionScoringJob> _logger,
             IConfiguration _configuration)
         {
@@ -72,19 +72,21 @@ namespace BPFL.API.BackgroundJobs
 
             int totalScored = 0;
 
+            var semaphore = new SemaphoreSlim(5); 
 
-            foreach (var matchId in matchIdsToScore)
+            var tasks = matchIdsToScore.Select(async matchId =>
             {
+                await semaphore.WaitAsync(ct);
                 try
                 {
                     var result = await scoring.ScoreMatchPredictionsAsync(matchId, ct);
-                    totalScored += result.ScoredPredictionsCount;
+                    return result.ScoredPredictionsCount;
                 }
-                catch (Exception ex)
+                finally
                 {
-                    logger.LogError(ex, "Failed to score predictions for match {MatchId}", matchId);
+                    semaphore.Release();
                 }
-            }
+            });
 
             logger.LogInformation(
                 "Prediction scoring cycle completed. Total predictions scored: {Total}",
