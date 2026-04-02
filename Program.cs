@@ -65,7 +65,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("https://predictionfootabllgame.vercel.app")
+        policy.WithOrigins("https://predictionfootballgame.vercel.app")
               .AllowAnyHeader()
               .AllowAnyMethod()
              .AllowCredentials();
