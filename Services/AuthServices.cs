@@ -96,7 +96,9 @@ namespace BPFL.API.Services
             bPFL_DBContext.Users.Add(user);
             await bPFL_DBContext.SaveChangesAsync(ct);
 
-            var verifyUrl = $"https://localhost:5173/verify-email?token={Uri.EscapeDataString(emailToken)}";
+            var frontendBaseUrl = configuration["App:FrontendBaseUrl"];
+            var verifyUrl = $"{frontendBaseUrl}/verify-email?token={Uri.EscapeDataString(emailToken)}";
+
             await emailService.SendVerificationEmailAsync(user.Email, verifyUrl, ct);
 
             return AuthResult.Ok(new UserResponseDTO
