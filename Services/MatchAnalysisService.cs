@@ -29,13 +29,11 @@ namespace BPFL.API.Services
             int homeTeamId = match.HomeTeamId;
             int awayTeamId = match.AwayTeamId;
 
-            
-            var (homeLastMatches, awayLastMatches, homeHomeMatches, awayAwayMatches) = await (
-                GetLatestMatchesAsync(homeTeamId, ct),
-                GetLatestMatchesAsync(awayTeamId, ct),
-                GetLastHomeMatchesAsync(homeTeamId, ct),
-                GetLastAwayMatchesAsync(awayTeamId, ct)
-            ).WhenAll();
+
+            var homeLastMatches = await GetLatestMatchesAsync(homeTeamId, ct);
+            var awayLastMatches = await GetLatestMatchesAsync(awayTeamId, ct);
+            var homeHomeMatches = await GetLastHomeMatchesAsync(homeTeamId, ct);
+            var awayAwayMatches = await GetLastAwayMatchesAsync(awayTeamId, ct);
 
             int homeForm = CalculateFormPoints(homeLastMatches, homeTeamId);
             int awayForm = CalculateFormPoints(awayLastMatches, awayTeamId);
@@ -145,13 +143,5 @@ namespace BPFL.API.Services
     }
 
    
-    internal static class TaskExtensions
-    {
-        public static async Task<(T1, T2, T3, T4)> WhenAll<T1, T2, T3, T4>(
-            this (Task<T1> t1, Task<T2> t2, Task<T3> t3, Task<T4> t4) tasks)
-        {
-            await Task.WhenAll(tasks.t1, tasks.t2, tasks.t3, tasks.t4);
-            return (tasks.t1.Result, tasks.t2.Result, tasks.t3.Result, tasks.t4.Result);
-        }
-    }
+
 }
