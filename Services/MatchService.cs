@@ -26,25 +26,23 @@ namespace BPFL.API.Services
 
         public async Task<PagedResult<MatchDto>> GetAllAsync(int page = 1, int pageSize = 20, CancellationToken ct = default)
         {
-
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
             var query = GetMatches();
-            var countTask = query.CountAsync(ct);
 
-            var itemsTask = query
-                            .OrderByDescending(m => m.MatchDate)
-                            .Skip((page - 1) * pageSize)
-                            .Take(pageSize)
-                            .ToListAsync(ct);
+            var totalCount = await query.CountAsync(ct);
 
-            await Task.WhenAll(countTask, itemsTask);
+            var items = await query
+                .OrderByDescending(m => m.MatchDate)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(ct);
 
             return new PagedResult<MatchDto>
             {
-                Items = itemsTask.Result,
-                TotalCount = countTask.Result,
+                Items = items,
+                TotalCount = totalCount,
                 Page = page,
                 PageSize = pageSize
             };
