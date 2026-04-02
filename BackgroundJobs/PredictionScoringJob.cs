@@ -7,12 +7,12 @@ namespace BPFL.API.BackgroundJobs
     public class PredictionScoringJob : BackgroundService
     {
         private readonly IServiceScopeFactory scopeFactory;
-        private readonly ILogger<MatchSyncJob> logger;
+        private readonly ILogger<PredictionScoringJob> logger;
         private readonly IConfiguration configuration;
 
         private TimeSpan SyncInterval =>
           TimeSpan.FromMinutes(configuration.GetValue<double>("BackgroundJobs:MatchSyncIntervalMinutes", 15));
-        public PredictionScoringJob(IServiceScopeFactory _scopeFactory, ILogger<MatchSyncJob> _logger,
+        public PredictionScoringJob(IServiceScopeFactory _scopeFactory, ILogger<PredictionScoringJob> _logger,
             IConfiguration _configuration)
         {
             scopeFactory = _scopeFactory;

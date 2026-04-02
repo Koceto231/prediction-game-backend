@@ -53,7 +53,7 @@ namespace BPFL.API.Services
             };
 
             _bPFL_DBContext.Add(league);
-            await _bPFL_DBContext.SaveChangesAsync(ct);
+          
 
             _bPFL_DBContext.LeagueMembers.Add(new LeagueMember
             {
@@ -90,7 +90,7 @@ namespace BPFL.API.Services
                    LeagueErrorType.InvalidInviteCode);
             }
 
-            var alreadyMember = await _bPFL_DBContext.LeagueMembers.AnyAsync(s => s.UserId == userId, ct);
+            var alreadyMember = await _bPFL_DBContext.LeagueMembers.AnyAsync(s => s.UserId == userId && s.LeagueId == league.Id, ct);
 
             if (alreadyMember)
                 throw new LeagueException("You are already a member of this league.", LeagueErrorType.AlreadyMember);
@@ -158,25 +158,19 @@ namespace BPFL.API.Services
         {
             ValidateUserId(userId);
 
-            var leagueIds = await _bPFL_DBContext.LeagueMembers.AsNoTracking()
-                .Where(m => m.UserId == userId).Select(m => m.LeagueId)
-                .ToListAsync();
-
-            var leagues = await _bPFL_DBContext.Leagues
-             .AsNoTracking()
-             .Where(l => leagueIds.Contains(l.Id))
-             .Select(l => new LeagueResponseDTO
-             {
-                 Id = l.Id,
-                 Name = l.Name,
-                 InviteCode = l.InviteCode,
-                 OwnerUsername = l.Owner.Username,
-                 MemberCount = l.Members.Count,
-                 CreatedAt = l.CreatedAt
-             })
-             .ToListAsync(ct);
-
-            return leagues;
+            return await _bPFL_DBContext.Leagues
+                 .AsNoTracking()
+                 .Where(l => l.Members.Any(m => m.UserId == userId))
+                 .Select(l => new LeagueResponseDTO
+                 {
+                     Id = l.Id,
+                     Name = l.Name,
+                     InviteCode = l.InviteCode,
+                     OwnerUsername = l.Owner.Username,
+                     MemberCount = l.Members.Count,
+                     CreatedAt = l.CreatedAt
+                 })
+                 .ToListAsync(ct);
         }
 
         public async Task<List<LeagueLeaderboardEntryDTO>> GetLeagueLeaderboardsAsync(int userId, int leagueId,
@@ -184,16 +178,16 @@ namespace BPFL.API.Services
         {
             ValidateUserId(userId);
 
-            var leagueExist = await _bPFL_DBContext.Leagues.AnyAsync(k => k.Id == leagueId, ct);
+            var league = await _bPFL_DBContext.Leagues
+                .AsNoTracking()
+                .Where(k => k.Id == leagueId)
+                .Select(l => new { l.Id, IsMember = l.Members.Any(m => m.UserId == userId) })
+                .FirstOrDefaultAsync(ct);
 
-            if (!leagueExist)
-            {
+            if (league == null)
                 throw new LeagueException($"League {leagueId} not found.", LeagueErrorType.NotFound);
-            }
 
-            var isMember = await _bPFL_DBContext.LeagueMembers.AnyAsync(s => s.UserId == userId && s.LeagueId == leagueId, ct);
-
-            if (!isMember)
+            if (!league.IsMember)
             {
                 throw new LeagueException(
                    "You must be a member to view this league's leaderboard.",

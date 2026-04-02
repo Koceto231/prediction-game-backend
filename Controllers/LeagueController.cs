@@ -1,4 +1,5 @@
-﻿using BPFL.API.Models.DTO;
+﻿using BPFL.API.Exceptions;
+using BPFL.API.Models.DTO;
 using BPFL.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -34,9 +35,15 @@ namespace BPFL.API.Controllers
                 return Ok(league);
 
             }
-            catch (Exception ex)
+            catch (LeagueException ex)
             {
-                return BadRequest(ex.Message);
+                return ex.ErrorType switch
+                {
+                    LeagueErrorType.NotFound => NotFound(new { message = ex.Message }),
+                    LeagueErrorType.NotOwner => Forbid(),
+                    LeagueErrorType.AlreadyMember => Conflict(new { message = ex.Message }),
+                    _ => BadRequest(new { message = ex.Message })
+                };
             }
 
 
@@ -58,9 +65,15 @@ namespace BPFL.API.Controllers
                 var result = await leagueService.JoinLeagueAsync(userIdClaim.Value, joinLeagueDTO, ct);
                 return Ok(result);
             }
-            catch(Exception ex)
+            catch (LeagueException ex)
             {
-                return BadRequest(ex.Message);
+                return ex.ErrorType switch
+                {
+                    LeagueErrorType.NotFound => NotFound(new { message = ex.Message }),
+                    LeagueErrorType.InvalidInviteCode => BadRequest(new { message = ex.Message }),
+                    LeagueErrorType.AlreadyMember => Conflict(new { message = ex.Message }),
+                    _ => BadRequest(new { message = ex.Message })
+                };
             }
 
         }
@@ -79,9 +92,15 @@ namespace BPFL.API.Controllers
                 await leagueService.LeaveLeagueAsync(userIdClaim.Value, leagueId, ct);
                 return NoContent();
             }
-            catch (Exception ex)
+            catch (LeagueException ex)
             {
-                return BadRequest(ex.Message);
+                return ex.ErrorType switch
+                {
+                    LeagueErrorType.NotFound => NotFound(new { message = ex.Message }),
+                    LeagueErrorType.NotMember => BadRequest(new { message = ex.Message }),
+                    LeagueErrorType.CannotLeaveAsOwner => BadRequest(new { message = ex.Message }),
+                    _ => BadRequest(new { message = ex.Message })
+                };
             }
         }
 
@@ -100,9 +119,14 @@ namespace BPFL.API.Controllers
                 await leagueService.DeleteLeague(userIdClaim.Value, leagueId, ct);
                 return NoContent();
             }
-            catch (Exception ex)
+            catch (LeagueException ex)
             {
-                return BadRequest(ex.Message);
+                return ex.ErrorType switch
+                {
+                    LeagueErrorType.NotFound => NotFound(new { message = ex.Message }),
+                    LeagueErrorType.NotOwner => Forbid(),
+                    _ => BadRequest(new { message = ex.Message })
+                };
             }
         }
 
@@ -115,15 +139,10 @@ namespace BPFL.API.Controllers
                 return Unauthorized(new { message = "Invalid or missing ID claim" });
             }
 
-            try
-            {
+            
                 var result = await leagueService.GetMyLeages(userIdClaim.Value, ct);
                 return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+           
         }
 
         [HttpGet("{leagueId}/leaderboard")]
@@ -141,9 +160,14 @@ namespace BPFL.API.Controllers
                 var result = await leagueService.GetLeagueLeaderboardsAsync(userIdClaim.Value, leagueId, ct);
                 return Ok(result);
             }
-            catch (Exception ex)
+            catch (LeagueException ex)
             {
-                return BadRequest(ex.Message);
+                return ex.ErrorType switch
+                {
+                    LeagueErrorType.NotFound => NotFound(new { message = ex.Message }),
+                    LeagueErrorType.NotMember => Forbid(),
+                    _ => BadRequest(new { message = ex.Message })
+                };
             }
 
         }

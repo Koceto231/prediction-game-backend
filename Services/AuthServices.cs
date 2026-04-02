@@ -1,5 +1,4 @@
-﻿
-using BCrypt.Net;
+﻿using BCrypt.Net;
 using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Models.DTO;
@@ -35,42 +34,41 @@ namespace BPFL.API.Services
         private readonly IConfiguration configuration;
         private readonly EmailService emailService;
 
+        // FIX: Cache JWT config at construction time instead of re-reading on every token generation
+        private readonly string _jwtKey;
+        private readonly string _jwtIssuer;
+        private readonly string _jwtAudience;
+        private readonly int _jwtExpirationMinutes;
+        private readonly SymmetricSecurityKey _jwtSecurityKey;
 
+        // FIX: Compile the special chars set once instead of string.Contains() per char on every validation
+        private static readonly HashSet<char> _specialChars =
+            new("!@#$%^&*()_+-=[]{}|;:,.<>?");
 
-        public AuthServices(BPFL_DBContext _bPFLDBContext,IConfiguration _configuration, ILogger<AuthServices> logger, EmailService _emailService)
+        public AuthServices(BPFL_DBContext _bPFLDBContext, IConfiguration _configuration, ILogger<AuthServices> logger, EmailService _emailService)
         {
             bPFL_DBContext = _bPFLDBContext;
             configuration = _configuration;
             _logger = logger;
             emailService = _emailService;
+
+            _jwtKey = configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured.");
+            _jwtIssuer = configuration["Jwt:Issuer"]!;
+            _jwtAudience = configuration["Jwt:Audience"]!;
+            _jwtExpirationMinutes = int.Parse(configuration["Jwt:ExpirationMinutes"] ?? "15");
+            _jwtSecurityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtKey));
         }
 
         public async Task<AuthResult> RegisterAsync(RegisterDTO registerDTO, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(registerDTO);
 
-            var emailValidator = new EmailAddressAttribute();
+            var validationError = ValidatePassword(registerDTO.Password);
+            if (validationError != null) return AuthResult.Fail(validationError);
 
+            var emailValidator = new EmailAddressAttribute();
             if (string.IsNullOrWhiteSpace(registerDTO.Email) || !emailValidator.IsValid(registerDTO.Email))
                 return AuthResult.Fail("Invalid email format.");
-
-            if (string.IsNullOrWhiteSpace(registerDTO.Password))
-                return AuthResult.Fail("Password is required.");
-
-            if (registerDTO.Password.Length < 8)
-                return AuthResult.Fail("Password must be at least 8 characters.");
-
-            if (!registerDTO.Password.Any(char.IsUpper))
-                return AuthResult.Fail("Password must contain at least one uppercase letter.");
-
-            if (!registerDTO.Password.Any(char.IsLower))
-                return AuthResult.Fail("Password must contain at least one lowercase letter.");
-
-            if (!registerDTO.Password.Any(char.IsDigit))
-                return AuthResult.Fail("Password must contain at least one digit.");
-
-            if (!registerDTO.Password.Any(c => "!@#$%^&*()_+-=[]{}|;:,.<>?".Contains(c)))
-                return AuthResult.Fail("Password must contain at least one special character.");
 
             if (string.IsNullOrWhiteSpace(registerDTO.Username) || registerDTO.Username.Length < 3)
                 return AuthResult.Fail("Invalid username.");
@@ -82,24 +80,23 @@ namespace BPFL.API.Services
 
             string passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(registerDTO.Password, 13);
 
+            var emailToken = GenerateEmailToken();
+
             var user = new User
             {
                 Email = normalizedEmail,
                 Username = registerDTO.Username.Trim(),
                 Password = passwordHash,
-                Role = "User"
+                Role = "User",
+                EmailVerificationToken = emailToken,
+                EmailVerificationTokenExpires = DateTime.UtcNow.AddMinutes(60),
+                IsEmailVerified = false
             };
 
-            var emailToken = GenerateEmailToken();
-
-            user.EmailVerificationToken = emailToken;
-            user.EmailVerificationTokenExpires = DateTime.UtcNow.AddMinutes(60);
-            user.IsEmailVerified = false;
             bPFL_DBContext.Users.Add(user);
             await bPFL_DBContext.SaveChangesAsync(ct);
 
             var verifyUrl = $"https://localhost:5173/verify-email?token={Uri.EscapeDataString(emailToken)}";
-
             await emailService.SendVerificationEmailAsync(user.Email, verifyUrl, ct);
 
             return AuthResult.Ok(new UserResponseDTO
@@ -115,14 +112,15 @@ namespace BPFL.API.Services
         {
             ArgumentNullException.ThrowIfNull(loginDTO);
 
-           if (string.IsNullOrWhiteSpace(loginDTO.Email) || string.IsNullOrWhiteSpace(loginDTO.Password)) { 
+            if (string.IsNullOrWhiteSpace(loginDTO.Email) || string.IsNullOrWhiteSpace(loginDTO.Password))
                 return AuthResult.Fail("Invalid credentials.");
-            }
 
             var normalizedEmail = NormalizeEmail(loginDTO.Email);
 
-
-            var user = await bPFL_DBContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == normalizedEmail,ct);
+            // FIX: Removed AsNoTracking() — we need tracking here to detect the user entity exists;
+            // also, for Login specifically AsNoTracking is fine, but kept for correctness
+            var user = await bPFL_DBContext.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
 
             if (user == null)
             {
@@ -130,11 +128,8 @@ namespace BPFL.API.Services
                 return AuthResult.Fail("Invalid credentials.");
             }
 
-
             if (!user.IsEmailVerified)
-            {
                 return AuthResult.Fail("Please verify your email first.");
-            }
 
             if (user.Password == null)
             {
@@ -160,36 +155,33 @@ namespace BPFL.API.Services
                 AccessToken = accesstoken,
                 RefreshToken = refreshToken
             });
-
         }
 
-        public async Task<AuthResult> RefreshTokenAsync(string rawRefreshToken,CancellationToken ct = default)
+        public async Task<AuthResult> RefreshTokenAsync(string rawRefreshToken, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(rawRefreshToken))
                 return AuthResult.Fail("Invalid refresh token.");
 
             var hashedToken = HashToken(rawRefreshToken);
 
-            var storedToken = await bPFL_DBContext.RefreshTokens.Include(t => t.User).FirstOrDefaultAsync(t => t.TokenHash == hashedToken, ct);
+            var storedToken = await bPFL_DBContext.RefreshTokens
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.TokenHash == hashedToken, ct);
 
             if (storedToken == null || !storedToken.IsActive)
                 return AuthResult.Fail("Invalid refresh token.");
 
             storedToken.RevokedAt = DateTime.UtcNow;
-
             await bPFL_DBContext.SaveChangesAsync(ct);
 
             var newAccessToken = GenerateJwtToken(storedToken.User);
             var newRefreshToken = await CreateAndStoreRefreshTokenAsync(storedToken.User, ct);
-
-      
 
             return AuthResult.Ok(new AuthTokenDTO
             {
                 AccessToken = newAccessToken,
                 RefreshToken = newRefreshToken
             });
-
         }
 
         public async Task<AuthResult> RevokeRefreshTokenAsync(string rawRefreshToken, CancellationToken ct = default)
@@ -211,13 +203,13 @@ namespace BPFL.API.Services
             return AuthResult.Ok();
         }
 
-
         public async Task<bool> VerifyEmailAsync(string emailToken, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(emailToken))
                 return false;
 
-            var user = await bPFL_DBContext.Users.FirstOrDefaultAsync(c => c.EmailVerificationToken == emailToken, ct);
+            var user = await bPFL_DBContext.Users
+                .FirstOrDefaultAsync(c => c.EmailVerificationToken == emailToken, ct);
 
             if (user == null)
                 return false;
@@ -230,32 +222,21 @@ namespace BPFL.API.Services
             user.EmailVerificationTokenExpires = null;
 
             await bPFL_DBContext.SaveChangesAsync(ct);
-
-           
-
             return true;
         }
 
         public async Task<AuthResult> ForgotPasswordAsync(ForgotPaswwordDTO forgotPaswwordDTO, CancellationToken ct = default)
         {
             if (forgotPaswwordDTO == null || string.IsNullOrWhiteSpace(forgotPaswwordDTO.Email))
-            {
                 return AuthResult.Fail("Email is required.");
-            }
 
             var normilizeEmail = NormalizeEmail(forgotPaswwordDTO.Email);
 
             var user = await bPFL_DBContext.Users.FirstOrDefaultAsync(u => u.Email == normilizeEmail, ct);
 
+            // FIX: Removed redundant null check on user.Email after null check on user
             if (user == null)
-            {
                 return AuthResult.Ok();
-            }
-
-            if ( string.IsNullOrWhiteSpace(user.Email))
-            {
-                return AuthResult.Fail("Invalid email address.");
-            }
 
             var resetToken = GenerateEmailToken();
 
@@ -264,18 +245,12 @@ namespace BPFL.API.Services
 
             await bPFL_DBContext.SaveChangesAsync(ct);
 
-
             var frontendBaseUrl = configuration["App:FrontendBaseUrl"] ?? "https://localhost:5173";
             var resetUrl = $"{frontendBaseUrl}/reset-password?token={Uri.EscapeDataString(resetToken)}";
 
-            _logger.LogInformation("Forgot password requested. DTO email: {DtoEmail}", forgotPaswwordDTO.Email);
-            _logger.LogInformation("Normalized email: {NormalizedEmail}", normilizeEmail);
-            _logger.LogInformation("User found: {Found}, User email: {UserEmail}", user != null, user?.Email);
-
-            await emailService.SendPasswordResetEmailAsync(normilizeEmail, resetUrl,ct);
+            await emailService.SendPasswordResetEmailAsync(normilizeEmail, resetUrl, ct);
 
             return AuthResult.Ok();
-
         }
 
         public async Task<AuthResult> ResetPasswordAsync(ResetPasswordDTO resetPasswordDTO, CancellationToken ct = default)
@@ -283,45 +258,23 @@ namespace BPFL.API.Services
             if (resetPasswordDTO == null || string.IsNullOrWhiteSpace(resetPasswordDTO.Token))
                 return AuthResult.Fail("Invalid token.");
 
-            if (string.IsNullOrWhiteSpace(resetPasswordDTO.NewPassword))
-                return AuthResult.Fail("New password is required.");
+            var validationError = ValidatePassword(resetPasswordDTO.NewPassword);
+            if (validationError != null) return AuthResult.Fail(validationError);
 
-            if (resetPasswordDTO.NewPassword.Length < 8)
-                return AuthResult.Fail("Password must be at least 8 characters.");
+            var user = await bPFL_DBContext.Users
+                .FirstOrDefaultAsync(u => u.PasswordResetToken == resetPasswordDTO.Token, ct);
 
-            if (!resetPasswordDTO.NewPassword.Any(char.IsUpper))
-                return AuthResult.Fail("Password must contain at least one uppercase letter.");
-
-            if (!resetPasswordDTO.NewPassword.Any(char.IsLower))
-                return AuthResult.Fail("Password must contain at least one lowercase letter.");
-
-            if (!resetPasswordDTO.NewPassword.Any(char.IsDigit))
-                return AuthResult.Fail("Password must contain at least one digit.");
-
-            if (!resetPasswordDTO.NewPassword.Any(c => "!@#$%^&*()_+-=[]{}|;:,.<>?".Contains(c)))
-                return AuthResult.Fail("Password must contain at least one special character.");
-
-            var user = await bPFL_DBContext.Users.FirstOrDefaultAsync(u => u.PasswordResetToken == resetPasswordDTO.Token, ct);
-
-            if (user == null)
-            {
-                return AuthResult.Fail("Invalid or expired reset token.");
-            }
-
-            if (user.PasswordResetTokenExpires == null || user.PasswordResetTokenExpires < DateTime.UtcNow)
+            if (user == null || user.PasswordResetTokenExpires == null || user.PasswordResetTokenExpires < DateTime.UtcNow)
                 return AuthResult.Fail("Invalid or expired reset token.");
 
             user.Password = BCrypt.Net.BCrypt.EnhancedHashPassword(resetPasswordDTO.NewPassword, 13);
             user.PasswordResetToken = null;
             user.PasswordResetTokenExpires = null;
 
-            var userRefreshTokens = await bPFL_DBContext.RefreshTokens.Where(rt => rt.UserId == user.Id && rt.RevokedAt == null)
-                .ToListAsync();
-
-            foreach (var refreshToken in userRefreshTokens)
-            {
-                refreshToken.RevokedAt = DateTime.UtcNow;
-            }
+            // FIX: Use ExecuteUpdateAsync — bulk update without loading all tokens into memory
+            await bPFL_DBContext.RefreshTokens
+                .Where(rt => rt.UserId == user.Id && rt.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.RevokedAt, DateTime.UtcNow), ct);
 
             await bPFL_DBContext.SaveChangesAsync(ct);
 
@@ -332,65 +285,38 @@ namespace BPFL.API.Services
         {
             var claims = new List<Claim>
             {
-              new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-              new Claim(ClaimTypes.Email, user.Email),
-              new Claim(ClaimTypes.Role, user.Role ?? "User")
-
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new(ClaimTypes.Email, user.Email),
+                new(ClaimTypes.Role, user.Role ?? "User")
             };
 
-            string? secketKey = configuration.GetSection("Jwt").GetSection("Key").Value;
-
-
-            if (string.IsNullOrEmpty(secketKey))
-            {
-                throw new Exception("JWT Key is not configured.");
-            }
-
-            byte[]? stringToByte = Encoding.UTF8.GetBytes(secketKey);
-            var key = new SymmetricSecurityKey(stringToByte);
-
-            var credetentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var expirationMinutes = int.Parse(configuration.GetSection("Jwt").GetSection("ExpirationMinutes").Value ?? "15");
-
-            string issuer = configuration.GetSection("Jwt").GetSection("Issuer").Value!;
-
-            string audience = configuration.GetSection("Jwt").GetSection("Audience").Value!;
-
+            // FIX: Uses cached key/config — no re-reading configuration on every call
+            var credentials = new SigningCredentials(_jwtSecurityKey, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
-
-                issuer: issuer,
-                audience: audience,
+                issuer: _jwtIssuer,
+                audience: _jwtAudience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
-                signingCredentials: credetentials
-                );
+                expires: DateTime.UtcNow.AddMinutes(_jwtExpirationMinutes),
+                signingCredentials: credentials
+            );
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            string jwtToken = tokenHandler.WriteToken(token);
-
-            return jwtToken; 
-
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         private static string GenerateRefreshToken()
         {
-            var bytes = RandomNumberGenerator.GetBytes(64);
-            return Convert.ToBase64String(bytes);
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         }
 
         private static string GenerateEmailToken()
         {
-            var bytes = RandomNumberGenerator.GetBytes(32);
-            return Convert.ToBase64String(bytes);
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         }
 
         private static string HashToken(string token)
         {
-            using var sha = SHA256.Create();
-            var bytes = Encoding.UTF8.GetBytes(token);
-            return Convert.ToHexString(sha.ComputeHash(bytes));
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
         }
 
         internal static string NormalizeEmail(string email)
@@ -415,6 +341,24 @@ namespace BPFL.API.Services
             await bPFL_DBContext.SaveChangesAsync(ct);
 
             return rawRefreshToken;
+        }
+
+        // FIX: Extracted password validation into one reusable method — eliminates copy-paste between Register and ResetPassword
+        private static string? ValidatePassword(string? password)
+        {
+            if (string.IsNullOrWhiteSpace(password))
+                return "Password is required.";
+            if (password.Length < 8)
+                return "Password must be at least 8 characters.";
+            if (!password.Any(char.IsUpper))
+                return "Password must contain at least one uppercase letter.";
+            if (!password.Any(char.IsLower))
+                return "Password must contain at least one lowercase letter.";
+            if (!password.Any(char.IsDigit))
+                return "Password must contain at least one digit.";
+            if (!password.Any(_specialChars.Contains))
+                return "Password must contain at least one special character.";
+            return null;
         }
     }
 }

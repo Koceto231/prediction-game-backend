@@ -23,30 +23,39 @@ namespace BPFL.API.Controllers
         public async Task<IActionResult> GetMe(CancellationToken ct = default)
         {
             var userId = GetUserId();
+            if (userId == null) 
+                return Unauthorized(new { message = "Invalid user token." });
 
-            var user = await profileService.GetCurrentProfileAsync(userId, ct);
-
-            return Ok(user);
+            try
+            {
+                var user = await profileService.GetCurrentProfileAsync(userId.Value, ct);
+                return Ok(user);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
         }
 
         [HttpGet("stats")]
         public async Task<IActionResult> GetStatsAsync(CancellationToken ct = default)
         {
             var userId = GetUserId();
+            if (userId == null)
+                return Unauthorized(new { message = "Invalid user token." });
 
-            var stats = await profileService.GetStatsAsync(userId, ct);
+            var stats = await profileService.GetStatsAsync(userId.Value, ct);
 
             return Ok(stats);
         }
 
-        private int GetUserId()
+        private int? GetUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
-                throw new UnauthorizedAccessException("Invalid user token.");
 
-            return userId;
+
+            return int.TryParse(userIdClaim, out var id) ? id : null;
         }
     }
 }
