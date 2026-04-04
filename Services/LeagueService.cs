@@ -50,18 +50,17 @@ namespace BPFL.API.Services
                 InviteCode = inveteToken,
                 OwnerId = userId,
                 CreatedAt = DateTime.UtcNow,
+                Members = new List<LeagueMember>
+    {
+        new LeagueMember
+        {
+            UserId = userId,
+            JoinedAt = DateTime.UtcNow
+        }
+    }
             };
 
-            _bPFL_DBContext.Add(league);
-          
-
-            _bPFL_DBContext.LeagueMembers.Add(new LeagueMember
-            {
-                UserId = userId,
-                LeagueId = league.Id,
-                JoinedAt = DateTime.UtcNow,
-            });
-
+            _bPFL_DBContext.Leagues.Add(league);
             await _bPFL_DBContext.SaveChangesAsync(ct);
 
             _logger.LogInformation(
