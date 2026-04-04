@@ -10,22 +10,24 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-
+using Microsoft.EntityFrameworkCore;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMemoryCache();
 
+
+
 builder.Services.AddDbContext<BPFL_DBContext>(options =>
-    options.UseSqlServer(
+    options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions =>
+        npgsqlOptions =>
         {
-            sqlOptions.EnableRetryOnFailure(
+            npgsqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
+                errorCodesToAdd: null);
         }));
 
 string baseUrl = builder.Configuration["FootballData:BaseUrl"]!;
