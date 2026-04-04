@@ -109,7 +109,7 @@ namespace BPFL.API.Data
             {
                 entity.HasIndex(e => e.GoogleId)
           .IsUnique()
-          .HasFilter("[GoogleId] IS NOT NULL");
+          .HasFilter("\"GoogleId\" IS NOT NULL");
             });
         }
 
