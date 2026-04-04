@@ -361,7 +361,7 @@ namespace BPFL.API.Migrations
 
                     b.HasIndex("GoogleId")
                         .IsUnique()
-                        .HasFilter("[GoogleId] IS NOT NULL");
+                        .HasFilter("\"GoogleId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });

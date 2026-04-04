@@ -313,7 +313,7 @@ namespace BPFL.API.Migrations
                 table: "Users",
                 column: "GoogleId",
                 unique: true,
-                filter: "[GoogleId] IS NOT NULL");
+                filter: "\"GoogleId\" IS NOT NULL");
         }
 
         /// <inheritdoc />

@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BPFL.API.Migrations
 {
     [DbContext(typeof(BPFL_DBContext))]
-    [Migration("20260404201530_InitialPostgres")]
+    [Migration("20260404202740_InitialPostgres")]
     partial class InitialPostgres
     {
         /// <inheritdoc />
@@ -364,7 +364,7 @@ namespace BPFL.API.Migrations
 
                     b.HasIndex("GoogleId")
                         .IsUnique()
-                        .HasFilter("[GoogleId] IS NOT NULL");
+                        .HasFilter("\"GoogleId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
