@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using BPFL.API.Services.FantasyServices;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -115,6 +116,7 @@ builder.Services.AddScoped<LeagueService>();
 builder.Services.AddScoped<GoogleAuthService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<ProfileService>();
+builder.Services.AddScoped<FantasyServices>();
 
 builder.Services.AddHostedService<MatchSyncJob>();
 builder.Services.AddHostedService<PredictionScoringJob>();
