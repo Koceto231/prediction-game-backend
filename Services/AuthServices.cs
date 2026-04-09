@@ -119,8 +119,7 @@ namespace BPFL.API.Services
 
             var normalizedEmail = NormalizeEmail(loginDTO.Email);
 
-            // FIX: Removed AsNoTracking() — we need tracking here to detect the user entity exists;
-            // also, for Login specifically AsNoTracking is fine, but kept for correctness
+          
             var user = await bPFL_DBContext.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
 
@@ -236,7 +235,7 @@ namespace BPFL.API.Services
 
             var user = await bPFL_DBContext.Users.FirstOrDefaultAsync(u => u.Email == normilizeEmail, ct);
 
-            // FIX: Removed redundant null check on user.Email after null check on user
+           
             if (user == null)
                 return AuthResult.Ok();
 
@@ -273,7 +272,7 @@ namespace BPFL.API.Services
             user.PasswordResetToken = null;
             user.PasswordResetTokenExpires = null;
 
-            // FIX: Use ExecuteUpdateAsync — bulk update without loading all tokens into memory
+           
             await bPFL_DBContext.RefreshTokens
                 .Where(rt => rt.UserId == user.Id && rt.RevokedAt == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.RevokedAt, DateTime.UtcNow), ct);
@@ -292,7 +291,7 @@ namespace BPFL.API.Services
                 new(ClaimTypes.Role, user.Role ?? "User")
             };
 
-            // FIX: Uses cached key/config — no re-reading configuration on every call
+          
             var credentials = new SigningCredentials(_jwtSecurityKey, SecurityAlgorithms.HmacSha256);
 
             var token = new JwtSecurityToken(
@@ -345,7 +344,6 @@ namespace BPFL.API.Services
             return rawRefreshToken;
         }
 
-        // FIX: Extracted password validation into one reusable method — eliminates copy-paste between Register and ResetPassword
         private static string? ValidatePassword(string? password)
         {
             if (string.IsNullOrWhiteSpace(password))

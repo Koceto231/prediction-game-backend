@@ -1,4 +1,5 @@
 ﻿using BPFL.API.Models;
+using BPFL.API.Models.FantasyModel;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Data
@@ -23,8 +24,107 @@ namespace BPFL.API.Data
 
         public DbSet<LeagueMember> LeagueMembers { get; set; }
 
+        public DbSet<FantasyPlayer> FantasyPlayers { get; set; }
+        public DbSet<FantasyTeam> FantasyTeams { get; set; }
+        public DbSet<FantasyGameweek> FantasyGameweeks { get; set; }
+        public DbSet<FantasyTeamSelection> FantasyTeamSelections  { get; set; }
+        public DbSet<PlayerMatchFantasyStat> PlayerMatchFantasyStats { get; set; }
+        public DbSet<FantasyScore> FantasyScores { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            modelBuilder.Entity<FantasyPlayer>()
+                .HasIndex(p => p.ExternalPlayerId)
+                .IsUnique();
+
+            modelBuilder.Entity<FantasyTeam>()
+                .HasIndex(p => p.UserId)
+                .IsUnique();
+
+            modelBuilder.Entity<FantasyTeamSelection>()
+                .HasIndex(p => new
+                {
+                    p.FantasyTeamId,
+                    p.FantasyGameweekId,
+                    p.FantasyPlayerId
+
+                })
+                .IsUnique();
+
+            modelBuilder.Entity<PlayerMatchFantasyStat>()
+                 .HasIndex(p => new
+                 {
+                     p.MatchId,
+                     p.FantasyPlayerId
+
+                 })
+                .IsUnique();
+
+            modelBuilder.Entity<FantasyScore>()
+                 .HasIndex(p => new
+                 {
+                     p.FantasyTeamId,
+                     p.FantasyGameweekId
+
+                 })
+                .IsUnique();
+
+            modelBuilder.Entity<FantasyPlayer>()
+    .HasOne(fp => fp.Team)
+    .WithMany()
+    .HasForeignKey(fp => fp.TeamId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FantasyTeam>()
+                .HasOne(ft => ft.User)
+                .WithMany()
+                .HasForeignKey(ft => ft.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FantasyTeamSelection>()
+                .HasOne(s => s.FantasyTeam)
+                .WithMany()
+                .HasForeignKey(s => s.FantasyTeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FantasyTeamSelection>()
+                .HasOne(s => s.FantasyPlayer)
+                .WithMany()
+                .HasForeignKey(s => s.FantasyPlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FantasyTeamSelection>()
+                .HasOne(s => s.FantasyGameweek)
+                .WithMany()
+                .HasForeignKey(s => s.FantasyGameweekId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PlayerMatchFantasyStat>()
+                .HasOne(pms => pms.FantasyPlayer)
+                .WithMany()
+                .HasForeignKey(pms => pms.FantasyPlayerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PlayerMatchFantasyStat>()
+                .HasOne(pms => pms.Match)
+                .WithMany()
+                .HasForeignKey(pms => pms.MatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FantasyScore>()
+                .HasOne(fs => fs.FantasyTeam)
+                .WithMany()
+                .HasForeignKey(fs => fs.FantasyTeamId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<FantasyScore>()
+                .HasOne(fs => fs.FantasyGameweek)
+                .WithMany()
+                .HasForeignKey(fs => fs.FantasyGameweekId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+
             modelBuilder.Entity<User>()
     .HasIndex(u => u.Email)
     .IsUnique();
