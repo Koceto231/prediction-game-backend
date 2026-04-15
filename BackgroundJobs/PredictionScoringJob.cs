@@ -44,7 +44,7 @@ namespace BPFL.API.BackgroundJobs
 
         private async Task RunCycleAsync(CancellationToken ct)
         {
-            logger.LogInformation("Prediction sync cycle started at {Time}", DateTime.UtcNow);
+            logger.LogInformation("Prediction scoring cycle started at {Time}", DateTime.UtcNow);
 
             using var scope = scopeFactory.CreateScope();
 
@@ -52,40 +52,36 @@ namespace BPFL.API.BackgroundJobs
             var db = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
 
             var matchIdsToScore = await db.Matches
-    .Where(m => m.Status == "FINISHED"
-             && m.HomeScore != null
-             && m.AwayScore != null
-             && db.Predictions.Any(p => p.MatchId == m.Id))
-    .Select(m => m.Id)
-    .ToListAsync(ct);
+                .Where(m => m.Status == "FINISHED"
+                         && m.HomeScore != null
+                         && m.AwayScore != null
+                         && db.Predictions.Any(p => p.MatchId == m.Id))
+                .Select(m => m.Id)
+                .ToListAsync(ct);
+
+            logger.LogInformation("Found match IDs to score: {MatchIds}", string.Join(", ", matchIdsToScore));
 
             if (matchIdsToScore.Count == 0)
             {
-                logger.LogInformation("No unscored finished matches found.");
+                logger.LogInformation("No finished matches with predictions found.");
                 return;
             }
 
-            logger.LogInformation(
-                "Found {Count} finished matches with unscored predictions.",
-                matchIdsToScore.Count);
-
             int totalScored = 0;
 
-            var semaphore = new SemaphoreSlim(5); 
-
-            var tasks = matchIdsToScore.Select(async matchId =>
+            foreach (var matchId in matchIdsToScore)
             {
-                await semaphore.WaitAsync(ct);
-                try
-                {
-                    var result = await scoring.ScoreMatchPredictionsAsync(matchId, ct);
-                    return result.ScoredPredictionsCount;
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
+                logger.LogInformation("Scoring match {MatchId}", matchId);
+
+                var result = await scoring.ScoreMatchPredictionsAsync(matchId, ct);
+
+                logger.LogInformation(
+                    "Finished scoring match {MatchId}. Scored predictions: {Count}",
+                    matchId,
+                    result.ScoredPredictionsCount);
+
+                totalScored += result.ScoredPredictionsCount;
+            }
 
             logger.LogInformation(
                 "Prediction scoring cycle completed. Total predictions scored: {Total}",
