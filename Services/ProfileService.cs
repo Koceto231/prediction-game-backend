@@ -48,7 +48,7 @@ namespace BPFL.API.Services
             return new ProfileStatsDTO
             {
                 TotalPredictions = stats.TotalPredictions,
-                TotalPoints = stats.TotalPoints,
+                TotalPoints = stats.TotalPoints ?? 0,
                 CorrectOutcomeCount = stats.CorrectOutcomeCount,
                 AccuracyPercent = accuracyPercent
             };

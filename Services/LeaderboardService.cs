@@ -36,7 +36,7 @@ namespace BPFL.API.Services
                 {
                     UserId = k.Key,
                     Username = k.First().User.Username,
-                    TotalPoints = k.Sum(l => l.Points),
+                    TotalPoints = k.Sum(l => l.Points ?? 0),
                     CorrectResults = k.Count(p => p.Points == 3)
                 })
                 .OrderByDescending(x => x.TotalPoints)
