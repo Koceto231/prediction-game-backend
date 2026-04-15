@@ -202,7 +202,7 @@ namespace BPFL.API.Services
                 {
                     UserId = g.Key,
                     Username = g.First().User.Username,
-                    TotalPoints = g.Sum(p => p.Points),
+                    TotalPoints = g.Sum(p => p.Points ?? 0),
                     CorrectResults = g.Count(p => p.Points == 3),
                     TotalPredictions = g.Count()
                 })
