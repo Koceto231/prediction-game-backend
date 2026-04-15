@@ -51,14 +51,13 @@ namespace BPFL.API.BackgroundJobs
             var scoring = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
             var db = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
 
-            var matchIdsToScore = await db.Predictions
-                            .Where(p => p.Points == null
-                                     && p.Match.Status == "FINISHED"
-                                     && p.Match.HomeScore != null
-                                     && p.Match.AwayScore != null)
-                            .Select(p => p.MatchId)
-                            .Distinct()
-                            .ToListAsync(ct);
+            var matchIdsToScore = await db.Matches
+    .Where(m => m.Status == "FINISHED"
+             && m.HomeScore != null
+             && m.AwayScore != null
+             && db.Predictions.Any(p => p.MatchId == m.Id))
+    .Select(m => m.Id)
+    .ToListAsync(ct);
 
             if (matchIdsToScore.Count == 0)
             {
