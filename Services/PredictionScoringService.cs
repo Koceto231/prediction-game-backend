@@ -66,7 +66,7 @@ namespace BPFL.API.Services
             }
 
             var predictionsForThisMatch = await bPFL_DBContext.Predictions
-                .Where(x => x.MatchId == matchId && x.Points == null)
+                .Where(x => x.MatchId == matchId)
                 .ToListAsync(ct);
 
             if (predictionsForThisMatch.Count == 0)
