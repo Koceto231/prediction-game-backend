@@ -1,16 +1,18 @@
 using BPFL.API.BackgroundJobs;
+using BPFL.API.Config;
 using BPFL.API.Data;
 using BPFL.API.Middleware;
 using BPFL.API.Services;
+using BPFL.API.Services.Agents;
 using BPFL.API.Services.External;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using BPFL.API.Services.FantasyServices;
 
 
@@ -36,6 +38,20 @@ string token = builder.Configuration["FootballData:Token"]!;
 
 Console.WriteLine($"[DEBUG] BaseUrl: '{baseUrl}'");
 Console.WriteLine($"[DEBUG] Token set: {!string.IsNullOrWhiteSpace(token)}");
+
+builder.Services.Configure<OpenRouterSettings>(
+    builder.Configuration.GetSection("OpenRouter"));
+
+builder.Services.AddHttpClient<OpenRouterClient>((sp, client) =>
+{
+    var settings = sp.GetRequiredService<IOptions<OpenRouterSettings>>().Value;
+    client.BaseAddress = new Uri(settings.BaseUrl);
+    client.DefaultRequestHeaders.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", settings.ApiKey);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddScoped<MatchPredictionAgent>();
 
 builder.Services.AddHttpClient<BPFLDataClient>(client =>
 {

@@ -120,7 +120,7 @@ namespace BPFL.API.Services
         {
             var matchAnalysis = await matchAnalysisService.AnalyzeMatch(match, ct);
             var predictionModel = predictionModelService.BuildModel(matchAnalysis);
-            var aiPrediction = aIPredictionService.AIBuildPrediction(matchAnalysis, predictionModel);
+            var aiPrediction = await aIPredictionService.AIBuildPredictionAsync(matchAnalysis, predictionModel, ct);
 
             var userPrediction = new PredictionResponseDTO
             {
