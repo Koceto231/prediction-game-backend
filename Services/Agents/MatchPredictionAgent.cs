@@ -45,7 +45,9 @@ namespace BPFL.API.Services.Agents
                 if (string.IsNullOrWhiteSpace(raw))
                     return null;
 
-                var result = JsonSerializer.Deserialize<AgentPredictionResult>(raw, new JsonSerializerOptions
+                var json = ExtractJson(raw);
+
+                var result = JsonSerializer.Deserialize<AgentPredictionResult>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -61,6 +63,20 @@ namespace BPFL.API.Services.Agents
                     analysis.HomeTeam, analysis.AwayTeam);
                 return null;
             }
+        }
+
+        private static string ExtractJson(string raw)
+        {
+            var trimmed = raw.Trim();
+            // Strip markdown code fences: ```json ... ``` or ``` ... ```
+            if (trimmed.StartsWith("```"))
+            {
+                var start = trimmed.IndexOf('\n');
+                var end = trimmed.LastIndexOf("```");
+                if (start >= 0 && end > start)
+                    return trimmed.Substring(start, end - start).Trim();
+            }
+            return trimmed;
         }
 
         private static string BuildPrompt(MatchAnalysisDTO analysis, PredictionModelDTO model)
