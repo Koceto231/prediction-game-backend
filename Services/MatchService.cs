@@ -18,10 +18,12 @@ namespace BPFL.API.Services
     public class MatchService
     {
         private readonly BPFL_DBContext bPFL_DBContext;
+        private readonly OddsService oddsService;
 
-        public MatchService(BPFL_DBContext _bPFL_DBContext)
+        public MatchService(BPFL_DBContext _bPFL_DBContext, OddsService _oddsService)
         {
             bPFL_DBContext = _bPFL_DBContext;
+            oddsService = _oddsService;
         }
 
         public async Task<PagedResult<MatchDto>> GetAllAsync(int page = 1, int pageSize = 20, CancellationToken ct = default)
@@ -74,11 +76,13 @@ namespace BPFL.API.Services
 
         public async Task<List<MatchDto>> GetFutureMatches(int take = 20, CancellationToken ct = default)
         {
-           take = Math.Clamp(take, 1, 100);
+            take = Math.Clamp(take, 1, 100);
+
+            await oddsService.EnsureOddsForUpcomingMatchesAsync(ct);
 
             return await GetMatches().Where(m => m.MatchDate >= DateTime.UtcNow && m.Status != "FINISHED")
-           .OrderBy(m => m.MatchDate)
-           .Take(take).ToListAsync(ct);
+                .OrderBy(m => m.MatchDate)
+                .Take(take).ToListAsync(ct);
         }
 
           private IQueryable<MatchDto> GetMatches()
@@ -97,7 +101,11 @@ namespace BPFL.API.Services
                 AwayTeamName = m.AwayTeam.Name,
 
                 HomeScore = m.HomeScore,
-                AwayScore = m.AwayScore
+                AwayScore = m.AwayScore,
+
+                HomeOdds = m.HomeOdds,
+                DrawOdds = m.DrawOdds,
+                AwayOdds = m.AwayOdds
             });
         }
         }

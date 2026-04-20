@@ -25,7 +25,12 @@ namespace BPFL.API.Models
 
         public string Status { get; set; } = null!;
 
-       public List<Prediction?> Predictions { get; set; } = new List<Prediction?>();
+        public decimal? HomeOdds { get; set; }
+        public decimal? DrawOdds { get; set; }
+        public decimal? AwayOdds { get; set; }
+
+        public List<Prediction?> Predictions { get; set; } = new List<Prediction?>();
+        public List<Bet> Bets { get; set; } = new List<Bet>();
 
         [Required]
         public Team HomeTeam { get; set; } = null!;

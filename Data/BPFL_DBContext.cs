@@ -30,6 +30,7 @@ namespace BPFL.API.Data
         public DbSet<FantasyTeamSelection> FantasyTeamSelections  { get; set; }
         public DbSet<PlayerMatchFantasyStat> PlayerMatchFantasyStats { get; set; }
         public DbSet<FantasyScore> FantasyScores { get; set; }
+        public DbSet<Bet> Bets { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

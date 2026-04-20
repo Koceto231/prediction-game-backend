@@ -1,4 +1,5 @@
 ﻿using BPFL.API.Data;
+using BPFL.API.Models;
 using BPFL.API.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,38 +50,46 @@ namespace BPFL.API.BackgroundJobs
             using var scope = scopeFactory.CreateScope();
 
             var scoring = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
+            var betService = scope.ServiceProvider.GetRequiredService<BetService>();
             var db = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
 
             var matchIdsToScore = await db.Matches
                 .Where(m => m.Status == "FINISHED"
                          && m.HomeScore != null
                          && m.AwayScore != null
-                         && db.Predictions.Any(p => p.MatchId == m.Id))
-                .Select(m => m.Id)
+                         && (db.Predictions.Any(p => p.MatchId == m.Id)
+                             || db.Bets.Any(b => b.MatchId == m.Id && b.Status == BetStatus.Pending)))
+                .Select(m => new { m.Id, m.HomeScore, m.AwayScore })
                 .ToListAsync(ct);
 
-            logger.LogInformation("Found match IDs to score: {MatchIds}", string.Join(", ", matchIdsToScore));
+            logger.LogInformation("Found match IDs to score: {MatchIds}", string.Join(", ", matchIdsToScore.Select(m => m.Id)));
 
             if (matchIdsToScore.Count == 0)
             {
-                logger.LogInformation("No finished matches with predictions found.");
+                logger.LogInformation("No finished matches to process.");
                 return;
             }
 
             int totalScored = 0;
 
-            foreach (var matchId in matchIdsToScore)
+            foreach (var match in matchIdsToScore)
             {
-                logger.LogInformation("Scoring match {MatchId}", matchId);
+                logger.LogInformation("Scoring match {MatchId}", match.Id);
 
-                var result = await scoring.ScoreMatchPredictionsAsync(matchId, ct);
-
-                logger.LogInformation(
-                    "Finished scoring match {MatchId}. Scored predictions: {Count}",
-                    matchId,
-                    result.ScoredPredictionsCount);
-
+                var result = await scoring.ScoreMatchPredictionsAsync(match.Id, ct);
+                logger.LogInformation("Scored {Count} predictions for match {MatchId}", result.ScoredPredictionsCount, match.Id);
                 totalScored += result.ScoredPredictionsCount;
+
+                if (match.HomeScore != null && match.AwayScore != null)
+                {
+                    var winner = match.HomeScore > match.AwayScore
+                        ? BPFL.API.Models.Predictionenums.MatchWinner.Home
+                        : match.AwayScore > match.HomeScore
+                            ? BPFL.API.Models.Predictionenums.MatchWinner.Away
+                            : BPFL.API.Models.Predictionenums.MatchWinner.Draw;
+
+                    await betService.ResolveMatchBetsAsync(match.Id, winner, ct);
+                }
             }
 
             logger.LogInformation(
