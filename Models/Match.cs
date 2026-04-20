@@ -29,6 +29,9 @@ namespace BPFL.API.Models
         public decimal? DrawOdds { get; set; }
         public decimal? AwayOdds { get; set; }
 
+        public double? ExpectedHomeGoals { get; set; }
+        public double? ExpectedAwayGoals { get; set; }
+
         public List<Prediction?> Predictions { get; set; } = new List<Prediction?>();
         public List<Bet> Bets { get; set; } = new List<Bet>();
 

@@ -82,13 +82,7 @@ namespace BPFL.API.BackgroundJobs
 
                 if (match.HomeScore != null && match.AwayScore != null)
                 {
-                    var winner = match.HomeScore > match.AwayScore
-                        ? BPFL.API.Models.Predictionenums.MatchWinner.Home
-                        : match.AwayScore > match.HomeScore
-                            ? BPFL.API.Models.Predictionenums.MatchWinner.Away
-                            : BPFL.API.Models.Predictionenums.MatchWinner.Draw;
-
-                    await betService.ResolveMatchBetsAsync(match.Id, winner, ct);
+                    await betService.ResolveMatchBetsAsync(match.Id, match.HomeScore.Value, match.AwayScore.Value, ct);
                 }
             }
 
