@@ -9,7 +9,6 @@ namespace BPFL.API.Services
         private readonly ILogger<WalletService> _logger;
 
         private const decimal TopUpAmount = 1000m;
-        private const decimal MaxBalance = 10000m;
 
         public WalletService(BPFL_DBContext db, ILogger<WalletService> logger)
         {
@@ -34,10 +33,7 @@ namespace BPFL.API.Services
             if (user == null)
                 throw new KeyNotFoundException("User not found.");
 
-            if (user.Balance >= MaxBalance)
-                throw new InvalidOperationException($"Balance is already at the maximum of {MaxBalance} coins.");
-
-            user.Balance = Math.Min(user.Balance + TopUpAmount, MaxBalance);
+            user.Balance += TopUpAmount;
             await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation("User {UserId} topped up. New balance: {Balance}", userId, user.Balance);
