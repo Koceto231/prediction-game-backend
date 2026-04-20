@@ -33,5 +33,7 @@ namespace BPFL.API.Models
         public string? PasswordResetToken { get; set; }
         public DateTime? PasswordResetTokenExpires { get; set; }
 
+        public decimal Balance { get; set; } = 1000;
+
     }
 }

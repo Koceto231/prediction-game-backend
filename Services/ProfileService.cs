@@ -65,7 +65,8 @@ namespace BPFL.API.Services
                      Id = u.Id,
                      Email = u.Email,
                      Username = u.Username,
-                     Role = u.Role
+                     Role = u.Role,
+                     Balance = u.Balance
                  })
                  .FirstOrDefaultAsync(ct);
 
