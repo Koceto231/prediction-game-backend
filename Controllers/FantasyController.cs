@@ -1,4 +1,4 @@
-﻿using BPFL.API.Models.FantasyDTO;
+using BPFL.API.Models.FantasyDTO;
 using BPFL.API.Services.FantasyServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,74 +11,137 @@ namespace BPFL.API.Controllers
     [Authorize]
     public class FantasyController : ControllerBase
     {
-        private readonly FantasyServices fantasyServices;
+        private readonly FantasyServices _fantasy;
 
-        public FantasyController(FantasyServices _fantasyServices)
-        {
-            fantasyServices = _fantasyServices;
-        }
+        public FantasyController(FantasyServices fantasy) => _fantasy = fantasy;
+
+        // ── Gameweek ─────────────────────────────────────────────────
 
         [HttpGet("gameweek/current")]
-
-        public async Task<IActionResult> GetCurrentFantasyGameweek(CancellationToken ct = default)
+        public async Task<IActionResult> GetCurrentGameweek(CancellationToken ct = default)
         {
-            var result = await fantasyServices.GetCurrentFantasyGameweekAsync(ct);
+            var result = await _fantasy.GetCurrentFantasyGameweekAsync(ct);
             return Ok(result);
         }
 
+        // ── Players ──────────────────────────────────────────────────
 
         [HttpGet("players")]
         public async Task<IActionResult> GetPlayers(CancellationToken ct = default)
         {
-            var result = await fantasyServices.GetFantasyPlayersAsync(ct);
+            var result = await _fantasy.GetFantasyPlayersAsync(ct);
             return Ok(result);
         }
+
+        // ── Team ─────────────────────────────────────────────────────
 
         [HttpPost("team")]
-
-        public async Task<IActionResult> CreateFantasyTeam([FromBody] CreateFantasyTeamDTO createFantasyTeamDTO,CancellationToken ct = default)
+        public async Task<IActionResult> CreateTeam([FromBody] CreateFantasyTeamDTO dto, CancellationToken ct = default)
         {
             var userId = GetUserId();
-            if (userId == null)
-                return Unauthorized(new { message = "Invalid user token." });
+            if (userId == null) return Unauthorized();
 
-            await fantasyServices.CreateFantasyTeam(userId.Value,createFantasyTeamDTO,ct);
-
-            return Ok();
-
-           
+            await _fantasy.CreateFantasyTeam(userId.Value, dto, ct);
+            return Ok(new { message = "Fantasy team created." });
         }
+
+        /// <summary>Get my team for the current (latest non-completed) gameweek.</summary>
+        [HttpGet("team")]
+        public async Task<IActionResult> GetMyTeamCurrent(CancellationToken ct = default)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+
+            var result = await _fantasy.GetMyTeamForCurrentGameweekAsync(userId.Value, ct);
+            if (result == null)
+                return Ok(new { hasTeam = false });
+
+            return Ok(result);
+        }
+
+        /// <summary>Get my team for a specific gameweek.</summary>
+        [HttpGet("team/{gameweekId:int}")]
+        public async Task<IActionResult> GetMyTeam(int gameweekId, CancellationToken ct = default)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+
+            var result = await _fantasy.GetMyFantasyTeamAsync(userId.Value, gameweekId, ct);
+            if (result == null)
+                return Ok(new { hasTeam = false });
+
+            return Ok(result);
+        }
+
+        // ── Selection ─────────────────────────────────────────────────
 
         [HttpPost("selection")]
-        public async Task<IActionResult> PostSelectionPlayers([FromBody] SaveFantasySelectionDTO saveFantasySelectionDTO,CancellationToken ct = default)
+        public async Task<IActionResult> SaveSelection([FromBody] SaveFantasySelectionDTO dto, CancellationToken ct = default)
         {
             var userId = GetUserId();
-            if (userId == null)
-                return Unauthorized(new { message = "Invalid user token." });
+            if (userId == null) return Unauthorized();
 
-             await fantasyServices.SaveFantasySelectionAsync(userId.Value, saveFantasySelectionDTO, ct);
-
-            return Ok();
+            await _fantasy.SaveFantasySelectionAsync(userId.Value, dto, ct);
+            return Ok(new { message = "Selection saved." });
         }
 
-        [HttpGet("team/{fantasyGameweekId}")]
+        // ── Leaderboard ───────────────────────────────────────────────
 
-        public async Task<IActionResult> GetMyTeam(int fantasyGameweekId,CancellationToken ct = default)
+        [HttpGet("leaderboard/{gameweekId:int}")]
+        public async Task<IActionResult> GetLeaderboard(int gameweekId, CancellationToken ct = default)
         {
-            var userId = GetUserId();
-            if (userId == null)
-                return Unauthorized(new { message = "Invalid user token." });
-
-            var result = await fantasyServices.GetMyFantasyTeamAsync(userId.Value, fantasyGameweekId,ct);
+            var result = await _fantasy.GetFantasyLeaderboardAsync(gameweekId, ct);
             return Ok(result);
-
         }
+
+        [HttpGet("leaderboard/current")]
+        public async Task<IActionResult> GetCurrentLeaderboard(CancellationToken ct = default)
+        {
+            var gameweek = await _fantasy.GetCurrentFantasyGameweekAsync(ct);
+            var result = await _fantasy.GetFantasyLeaderboardAsync(gameweek.Id, ct);
+            return Ok(new { gameweek, leaderboard = result });
+        }
+
+        // ── Admin endpoints ───────────────────────────────────────────
+
+        [HttpPost("admin/gameweek")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CreateGameweek([FromBody] CreateFantasyGameweekDTO dto, CancellationToken ct = default)
+        {
+            var result = await _fantasy.CreateGameweekAsync(dto, ct);
+            return Ok(result);
+        }
+
+        [HttpPost("admin/players")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AddPlayer([FromBody] AddFantasyPlayerDTO dto, CancellationToken ct = default)
+        {
+            var result = await _fantasy.AddPlayerAsync(dto, ct);
+            return Ok(result);
+        }
+
+        [HttpPost("admin/stats")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> SubmitStats([FromBody] SubmitPlayerStatsDTO dto, CancellationToken ct = default)
+        {
+            await _fantasy.SubmitPlayerStatsAsync(dto, ct);
+            return Ok(new { message = "Stats submitted and points calculated." });
+        }
+
+        [HttpPost("admin/score/{gameweekId:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CalculateScores(int gameweekId, CancellationToken ct = default)
+        {
+            await _fantasy.CalculateGameweekScoresAsync(gameweekId, ct);
+            return Ok(new { message = $"Scores calculated for gameweek {gameweekId}." });
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────
 
         private int? GetUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            return int.TryParse(userIdClaim, out var id) ? id : null;
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(claim, out var id) ? id : null;
         }
     }
 }
