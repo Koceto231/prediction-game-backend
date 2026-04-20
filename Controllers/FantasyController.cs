@@ -12,8 +12,15 @@ namespace BPFL.API.Controllers
     public class FantasyController : ControllerBase
     {
         private readonly FantasyServices _fantasy;
+        private readonly FantasyAutoSyncService _autoSync;
+        private readonly IConfiguration _config;
 
-        public FantasyController(FantasyServices fantasy) => _fantasy = fantasy;
+        public FantasyController(FantasyServices fantasy, FantasyAutoSyncService autoSync, IConfiguration config)
+        {
+            _fantasy  = fantasy;
+            _autoSync = autoSync;
+            _config   = config;
+        }
 
         // ── Gameweek ─────────────────────────────────────────────────
 
@@ -134,6 +141,26 @@ namespace BPFL.API.Controllers
         {
             await _fantasy.CalculateGameweekScoresAsync(gameweekId, ct);
             return Ok(new { message = $"Scores calculated for gameweek {gameweekId}." });
+        }
+
+        /// <summary>Sync fantasy players from team squads via football-data.org API.</summary>
+        [HttpPost("admin/sync-players")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> SyncPlayers(CancellationToken ct = default)
+        {
+            var codes = _config.GetSection("BackgroundJobs:LeagueCodes").Get<string[]>()
+                        ?? new[] { "PL" };
+            await _autoSync.SyncPlayersFromSquadsAsync(codes, ct);
+            return Ok(new { message = "Player sync complete." });
+        }
+
+        /// <summary>Auto-create fantasy gameweeks from matchdays.</summary>
+        [HttpPost("admin/sync-gameweeks")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> SyncGameweeks(CancellationToken ct = default)
+        {
+            await _autoSync.SyncGameweeksFromMatchdaysAsync(ct);
+            return Ok(new { message = "Gameweek sync complete." });
         }
 
         // ── Helpers ───────────────────────────────────────────────────

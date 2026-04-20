@@ -94,5 +94,19 @@ namespace BPFL.API.Services.External
         {
             return await GetAsync<MatchesResponseDTO>($"competitions/{leagueCode}/matches", ct);
         }
+
+        /// <summary>Fetch match detail including goals and bookings from /matches/{id}.</summary>
+        public async Task<ExternalMatchDetailDTO?> GetMatchDetailAsync(int externalMatchId, CancellationToken ct)
+        {
+            try
+            {
+                return await GetAsync<ExternalMatchDetailDTO>($"matches/{externalMatchId}", ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not fetch match detail for externalId={Id}", externalMatchId);
+                return null;
+            }
+        }
     }
 }

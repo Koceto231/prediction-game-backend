@@ -1,6 +1,7 @@
 ﻿using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Services;
+using BPFL.API.Services.FantasyServices;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.BackgroundJobs
@@ -49,17 +50,27 @@ namespace BPFL.API.BackgroundJobs
 
             using var scope = scopeFactory.CreateScope();
 
-            var scoring = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
-            var betService = scope.ServiceProvider.GetRequiredService<BetService>();
-            var db = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
+            var scoring          = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
+            var betService       = scope.ServiceProvider.GetRequiredService<BetService>();
+            var fantasyAutoSync  = scope.ServiceProvider.GetRequiredService<FantasyAutoSyncService>();
+            var db               = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
+
+            // Auto-create gameweeks from matchdays & finalise any completed ones
+            try { await fantasyAutoSync.SyncGameweeksFromMatchdaysAsync(ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Fantasy gameweek sync failed."); }
+
+            try { await fantasyAutoSync.TryFinaliseGameweekScoresAsync(ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Fantasy score finalisation failed."); }
 
             var matchIdsToScore = await db.Matches
                 .Where(m => m.Status == "FINISHED"
                          && m.HomeScore != null
                          && m.AwayScore != null
                          && (db.Predictions.Any(p => p.MatchId == m.Id)
-                             || db.Bets.Any(b => b.MatchId == m.Id && b.Status == BetStatus.Pending)))
-                .Select(m => new { m.Id, m.HomeScore, m.AwayScore })
+                             || db.Bets.Any(b => b.MatchId == m.Id && b.Status == BetStatus.Pending)
+                             || db.FantasyTeamSelections.Any(s => s.FantasyGameweek.StartDate <= m.MatchDate
+                                                               && s.FantasyGameweek.EndDate   >= m.MatchDate)))
+                .Select(m => new { m.Id, m.ExternalId, m.HomeScore, m.AwayScore })
                 .ToListAsync(ct);
 
             logger.LogInformation("Found match IDs to score: {MatchIds}", string.Join(", ", matchIdsToScore.Select(m => m.Id)));
@@ -83,6 +94,16 @@ namespace BPFL.API.BackgroundJobs
                 if (match.HomeScore != null && match.AwayScore != null)
                 {
                     await betService.ResolveMatchBetsAsync(match.Id, match.HomeScore.Value, match.AwayScore.Value, ct);
+                }
+
+                // Auto-fetch goals/assists/bookings and record fantasy stats
+                try
+                {
+                    await fantasyAutoSync.SyncMatchStatsAsync(match.Id, match.ExternalId, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Fantasy stats sync failed for match {Id}", match.Id);
                 }
             }
 

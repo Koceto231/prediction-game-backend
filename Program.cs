@@ -133,6 +133,7 @@ builder.Services.AddScoped<GoogleAuthService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<FantasyServices>();
+builder.Services.AddScoped<FantasyAutoSyncService>();
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<OddsService>();
 builder.Services.AddScoped<BetService>();
