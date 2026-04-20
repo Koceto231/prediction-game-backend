@@ -1,6 +1,7 @@
 ﻿using BPFL.API.Exceptions;
 using BPFL.API.Models.DTO;
 using BPFL.API.Services;
+using BPFL.API.Services.Agents;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +15,29 @@ namespace BPFL.API.Controllers
     public class PredictionController : ControllerBase
     {
         private readonly PredictionService predictionService;
+        private readonly OpenRouterClient openRouterClient;
 
-        public PredictionController(PredictionService _predictionService)
+        public PredictionController(PredictionService _predictionService, OpenRouterClient _openRouterClient)
         {
             predictionService = _predictionService;
+            openRouterClient = _openRouterClient;
+        }
+
+        [HttpGet("ai-status")]
+        public async Task<IActionResult> CheckAiStatus(CancellationToken ct)
+        {
+            try
+            {
+                var result = await openRouterClient.CompleteAsync(
+                    "You are a test assistant.",
+                    "Reply with the single word: OK",
+                    ct);
+                return Ok(new { status = "connected", response = result });
+            }
+            catch (Exception ex)
+            {
+                return Ok(new { status = "failed", error = ex.Message, inner = ex.InnerException?.Message });
+            }
         }
 
         [HttpPost]
