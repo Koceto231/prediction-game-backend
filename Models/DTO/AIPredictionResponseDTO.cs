@@ -13,5 +13,6 @@
         public double HomeWinProbability { get; set; }
         public double DrawProbability { get; set; }
         public double AwayWinProbability { get; set; }
+        public string? AIAnalysis { get; set; }
     }
 }
