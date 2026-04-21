@@ -58,7 +58,7 @@ namespace BPFL.API.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasOne(x => x.Match)
-                    .WithMany()
+                    .WithMany(m => m.Bets)
                     .HasForeignKey(x => x.MatchId)
                     .OnDelete(DeleteBehavior.Restrict);
 
