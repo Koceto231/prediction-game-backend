@@ -1,45 +1,45 @@
 # BPFL API — Backend
 
-ASP.NET Core 8 REST API за **Best Prediction Football League** — платформа за прогнози, залози и фентъзи футбол.
+ASP.NET Core 8 REST API for the **Best Prediction Football League** — a platform for football predictions, betting and fantasy football.
 
 ---
 
-## Технологии
+## Tech Stack
 
-| Слой | Технология |
+| Layer | Technology |
 |---|---|
 | Framework | ASP.NET Core 8 |
 | ORM | Entity Framework Core 8 + Npgsql |
-| База данни | PostgreSQL |
-| Автентикация | JWT + Refresh Tokens + Google OAuth |
+| Database | PostgreSQL |
+| Authentication | JWT + Refresh Tokens + Google OAuth |
 | AI | OpenRouter (Claude Haiku) |
-| Данни за мачове | football-data.org API |
-| Контейнеризация | Docker |
+| Match Data | football-data.org API |
+| Containerisation | Docker |
 
 ---
 
-## Структура на проекта
+## Project Structure
 
 ```
 BPFL.API/
 ├── Controllers/          # API endpoints
-├── Services/             # Бизнес логика
-│   ├── Agents/           # AI агент (OpenRouter)
-│   ├── External/         # football-data.org клиент
-│   └── FantasyServices/  # Фентъзи логика
-├── BackgroundJobs/       # Фонови задачи (Hosted Services)
-├── Models/               # Domain модели
+├── Services/             # Business logic
+│   ├── Agents/           # AI agent (OpenRouter)
+│   ├── External/         # football-data.org client
+│   └── FantasyServices/  # Fantasy football logic
+├── BackgroundJobs/       # Hosted background services
+├── Models/               # Domain models
 │   ├── DTO/              # Data Transfer Objects
-│   ├── FantasyModel/     # Фентъзи модели
-│   └── MatchAnalysis/    # Анализ модели
-├── Modules/              # Модулни entity-та
+│   ├── FantasyModel/     # Fantasy models
+│   └── MatchAnalysis/    # Analysis models
+├── Modules/              # Modular entities
 │   ├── Odds/             # MarketDefinition, MatchMarketOdds
 │   └── Wallet/           # Wallet, WalletTransaction
 ├── Data/                 # DBContext
-├── Migrations/           # EF Core миграции
-├── Middleware/           # Exception handling middleware
-├── Exceptions/           # Custom exception типове
-└── Config/               # Settings класове
+├── Migrations/           # EF Core migrations
+├── Middleware/           # Global exception handling
+├── Exceptions/           # Custom exception types
+└── Config/               # Settings classes
 ```
 
 ---
@@ -47,123 +47,123 @@ BPFL.API/
 ## API Endpoints
 
 ### Auth — `/api/auth`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/register` | Регистрация с email потвърждение |
-| POST | `/login` | Вход с JWT + Refresh Token |
-| POST | `/refresh` | Подновяване на access token |
-| POST | `/logout` | Изход (изтриване на refresh token) |
-| POST | `/google` | Google OAuth вход |
-| GET | `/verify-email` | Потвърждение на email |
-| POST | `/forgot-password` | Изпращане на reset email |
-| POST | `/reset-password` | Задаване на нова парола |
+| POST | `/register` | Register with email verification |
+| POST | `/login` | Login — returns JWT + Refresh Token |
+| POST | `/refresh` | Renew access token |
+| POST | `/logout` | Logout (invalidate refresh token) |
+| POST | `/google` | Google OAuth login |
+| GET | `/verify-email` | Confirm email address |
+| POST | `/forgot-password` | Send password reset email |
+| POST | `/reset-password` | Set new password |
 
 ### Matches — `/api/match`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/upcoming` | Предстоящи мачове |
-| GET | `/live` | Мачове в момента |
-| GET | `/finished` | Завършени мачове |
-| GET | `/{id}` | Детайли за мач |
+| GET | `/upcoming` | Upcoming matches |
+| GET | `/live` | Live matches |
+| GET | `/finished` | Finished matches |
+| GET | `/{id}` | Match details |
 
 ### Predictions — `/api/prediction`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/` | Създаване на прогноза (+ AI анализ) |
-| GET | `/me` | Всички мои прогнози |
+| POST | `/` | Create a prediction (includes AI analysis) |
+| GET | `/me` | All my predictions |
 
 ### Betting — `/api/bet`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/` | Залагане (Winner / ExactScore / BTTS / OverUnder) |
-| GET | `/me` | Всички мои залози |
+| POST | `/` | Place a bet (Winner / ExactScore / BTTS / OverUnder) |
+| GET | `/me` | All my bets |
 
 ### Odds — `/api/odds`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/{matchId}/{betType}` | Динамични коефициенти за залог |
+| GET | `/{matchId}/{betType}` | Dynamic odds for a bet type |
 
 ### Wallet — `/api/wallet`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Баланс и история |
-| POST | `/deposit` | Добавяне на монети |
-| POST | `/reset` | Нулиране до начален баланс |
+| GET | `/` | Balance and transaction history |
+| POST | `/deposit` | Add coins |
+| POST | `/reset` | Reset to starting balance |
 
 ### Fantasy — `/api/fantasy`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/team` | Моят фентъзи отбор |
-| POST | `/team/select` | Избор на играчи |
-| GET | `/players` | Всички налични играчи |
-| GET | `/gameweek/current` | Текущ гейм уийк |
-| GET | `/leaderboard/{gameweekId}` | Класиране |
-| GET | `/leaderboard/current` | Класиране за текущия гейм уийк |
+| GET | `/team` | My fantasy team |
+| POST | `/team/select` | Select players |
+| GET | `/players` | All available players |
+| GET | `/gameweek/current` | Current gameweek |
+| GET | `/leaderboard/{gameweekId}` | Gameweek leaderboard |
+| GET | `/leaderboard/current` | Current gameweek leaderboard |
 
 ### Leaderboard — `/api/leaderboard`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Глобално класиране по точки |
+| GET | `/` | Global points leaderboard |
 
 ### Leagues — `/api/league`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/create` | Създаване на лига |
-| POST | `/join` | Присъединяване с invite код |
-| GET | `/{leagueId}` | Детайли и класиране |
-| GET | `/my` | Моите лиги |
+| POST | `/create` | Create a private league |
+| POST | `/join` | Join via invite code |
+| GET | `/{leagueId}` | League details and standings |
+| GET | `/my` | My leagues |
 
 ### Profile — `/api/profile`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Профил и статистики |
-| PUT | `/` | Обновяване на профил |
+| GET | `/` | Profile and stats |
+| PUT | `/` | Update profile |
 
 ### Admin — `/api/admin/sync`
-| Метод | Endpoint | Описание |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/matches` | Ръчна синхронизация на мачове |
-| POST | `/teams` | Ръчна синхронизация на отбори |
-| POST | `/score` | Ръчно изчисляване на точки |
+| POST | `/matches` | Manual match sync |
+| POST | `/teams` | Manual team sync |
+| POST | `/score` | Manual points calculation |
 
 ---
 
-## Системи
+## Core Systems
 
-### Прогнозиране
-- Потребителят прогнозира точен резултат или победител
-- AI анализ (OpenRouter / Claude Haiku) генерира вероятности и обяснение
-- **Exact Score** = 5 точки | **Winner/Draw** = 3 точки
-- Точките се изчисляват автоматично при приключване на мача
+### Predictions
+- Users predict exact scores or match winners
+- AI analysis (OpenRouter / Claude Haiku) generates win probabilities and a text explanation
+- **Exact Score** = 5 points | **Winner/Draw** = 3 points
+- Points are calculated automatically when a match finishes
 
-### Залагане
-Четири типа залози с динамични коефициенти базирани на Poisson вероятности:
+### Betting
+Four bet types with dynamic odds based on Poisson probability models:
 
-| Тип | Описание | Точки |
+| Type | Description | Max Points |
 |---|---|---|
-| `Winner` | 1/X/2 | 1 |
-| `ExactScore` | Точен резултат | 5 |
-| `BTTS` | И двата отбора вкарват | 1 |
-| `OverUnder` | Над/под 1.5 / 2.5 / 3.5 гола | 1 |
+| `Winner` | 1 / X / 2 | 1 |
+| `ExactScore` | Correct score | 5 |
+| `BTTS` | Both teams to score | 1 |
+| `OverUnder` | Over/Under 1.5 / 2.5 / 3.5 goals | 1 |
 
-Коефициентите са динамични — изчисляват се от очакваните голове (xG) по Poisson модел.
+Odds are dynamic — calculated from expected goals (xG) using a Poisson model. Market Pick bets (Winner + BTTS + OU) can be combined for up to 3 points total.
 
-### Фентъзи
-- Всеки потребител избира 11 играча + 4 резерви
-- Играчите получават точки на база реални статистики (голове, асистенции, чисти листове и т.н.)
-- Класиране по гейм уийкове
+### Fantasy Football
+- Each user picks 11 starters + 4 substitutes
+- Players earn points based on real match statistics (goals, assists, clean sheets, etc.)
+- Gameweek leaderboards track weekly performance
 
-### Фонови задачи
-| Job | Интервал | Описание |
+### Background Jobs
+| Job | Interval | Description |
 |---|---|---|
-| `MatchSyncJob` | 15 мин | Синхронизация на мачове и отбори от football-data.org; изчислява odds за предстоящи мачове; auto-sync на фентъзи играчи |
-| `PredictionScoringJob` | 2 мин | Оценяване на прогнози и залози за завършени мачове |
+| `MatchSyncJob` | 15 min | Syncs matches and teams from football-data.org; recalculates odds for upcoming matches; auto-syncs fantasy players if none exist |
+| `PredictionScoringJob` | 2 min | Scores predictions and resolves bets for finished matches |
 
 ---
 
-## Конфигурация
+## Configuration
 
-Копирай `appsettings.json` и попълни:
+Fill in `appsettings.json`:
 
 ```json
 {
@@ -171,14 +171,14 @@ BPFL.API/
     "DefaultConnection": "Host=...;Database=...;Username=...;Password=..."
   },
   "Jwt": {
-    "Key": "<минимум 32 символа>",
+    "Key": "<at least 32 characters>",
     "Issuer": "BPFL",
     "Audience": "BPFL",
     "ExpirationMinutes": 15
   },
   "FootballData": {
     "BaseUrl": "https://api.football-data.org/v4/",
-    "Token": "<football-data.org API ключ>"
+    "Token": "<football-data.org API key>"
   },
   "Google": {
     "ClientId": "<Google OAuth Client ID>",
@@ -194,7 +194,7 @@ BPFL.API/
   },
   "OpenRouter": {
     "BaseUrl": "https://openrouter.ai",
-    "ApiKey": "<OpenRouter API ключ>",
+    "ApiKey": "<OpenRouter API key>",
     "Model": "anthropic/claude-haiku-4-5"
   },
   "App": {
@@ -208,23 +208,23 @@ BPFL.API/
 
 ---
 
-## Стартиране локално
+## Running Locally
 
 ```bash
-# 1. Клониране
+# 1. Clone
 git clone https://github.com/Koceto231/prediction-game-backend.git
 cd prediction-game-backend
 
-# 2. Попълни appsettings.json с горните стойности
+# 2. Fill in appsettings.json
 
-# 3. Приложи миграциите
+# 3. Apply migrations
 dotnet ef database update
 
-# 4. Стартирай
+# 4. Run
 dotnet run
 ```
 
-API ще е достъпно на `https://localhost:7xxx` — Swagger UI на `/swagger`.
+The API will be available at `https://localhost:7xxx` — Swagger UI at `/swagger`.
 
 ---
 
@@ -240,11 +240,11 @@ docker run -p 8080:8080 \
 
 ---
 
-## Автентикация
+## Authentication
 
-Всички защитени endpoints изискват:
+All protected endpoints require:
 ```
 Authorization: Bearer <access_token>
 ```
 
-Access token-ът изтича след 15 минути. Използвай `POST /api/auth/refresh` с refresh token-а (в HTTP-only cookie) за подновяване.
+The access token expires after 15 minutes. Use `POST /api/auth/refresh` with the refresh token (stored in an HTTP-only cookie) to obtain a new one.
