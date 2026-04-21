@@ -57,77 +57,93 @@ namespace BPFL.API.Services.FantasyServices
         // ── Player sync from squads ───────────────────────────────────
 
         /// <summary>
-        /// Fetch squad data for each league, create or update FantasyPlayers.
+        /// Fetch squad data for every team in the DB that has an ExternalId.
+        /// Calls /teams/{id} individually to guarantee squad data is returned.
         /// Safe to call repeatedly — idempotent via ExternalPlayerId.
         /// </summary>
         public async Task SyncPlayersFromSquadsAsync(string[] leagueCodes, CancellationToken ct = default)
         {
-            // Map ExternalTeamId → internal Team.Id
-            var teamMap = await _db.Teams.AsNoTracking()
-                .ToDictionaryAsync(t => t.ExternalId, t => t.Id, ct);
+            // All DB teams with a known football-data.org ID
+            var dbTeams = await _db.Teams.AsNoTracking()
+                .Where(t => t.ExternalId > 0)
+                .ToListAsync(ct);
+
+            if (dbTeams.Count == 0)
+            {
+                _logger.LogWarning("No teams with ExternalId found — skipping fantasy player sync.");
+                return;
+            }
 
             var existingPlayers = await _db.FantasyPlayers
                 .ToDictionaryAsync(p => p.ExternalPlayerId, p => p, ct);
 
-            int added = 0, updated = 0;
+            int added = 0, updated = 0, callCount = 0;
 
-            foreach (var code in leagueCodes)
+            foreach (var dbTeam in dbTeams)
             {
+                if (ct.IsCancellationRequested) break;
+
                 try
                 {
-                    var response = await _dataClient.GetTeamAsync(code, ct);
-                    var teams = response?.Teams ?? new();
+                    // football-data.org free tier: 10 req/min → wait 7 s between calls
+                    if (callCount > 0)
+                        await Task.Delay(TimeSpan.FromSeconds(7), ct);
 
-                    foreach (var extTeam in teams)
+                    callCount++;
+                    _logger.LogInformation("Fetching squad for team {Name} (ext={ExtId})", dbTeam.Name, dbTeam.ExternalId);
+
+                    var teamDetail = await _dataClient.GetSingleTeamAsync(dbTeam.ExternalId, ct);
+                    if (teamDetail?.Squad == null || teamDetail.Squad.Count == 0)
                     {
-                        if (!teamMap.TryGetValue(extTeam.Id, out var internalTeamId)) continue;
+                        _logger.LogWarning("No squad returned for team {Name}", dbTeam.Name);
+                        continue;
+                    }
 
-                        foreach (var squadPlayer in extTeam.Squad)
+                    foreach (var squadPlayer in teamDetail.Squad)
+                    {
+                        if (squadPlayer.Id <= 0) continue;
+
+                        var pos = MapPosition(squadPlayer.Position);
+
+                        if (existingPlayers.TryGetValue(squadPlayer.Id, out var existing))
                         {
-                            if (squadPlayer.Id <= 0) continue;
-
-                            var pos = MapPosition(squadPlayer.Position);
-
-                            if (existingPlayers.TryGetValue(squadPlayer.Id, out var existing))
+                            existing.Name          = squadPlayer.Name;
+                            existing.Position      = pos;
+                            existing.TeamId        = dbTeam.Id;
+                            existing.IsActive      = true;
+                            existing.LastUpdatedAt = DateTime.UtcNow;
+                            updated++;
+                        }
+                        else
+                        {
+                            var player = new FantasyPlayer
                             {
-                                existing.Name          = squadPlayer.Name;
-                                existing.Position      = pos;
-                                existing.TeamId        = internalTeamId;
-                                existing.IsActive      = true;
-                                existing.LastUpdatedAt = DateTime.UtcNow;
-                                updated++;
-                            }
-                            else
-                            {
-                                var player = new FantasyPlayer
-                                {
-                                    ExternalPlayerId = squadPlayer.Id,
-                                    Name             = squadPlayer.Name,
-                                    Position         = pos,
-                                    TeamId           = internalTeamId,
-                                    Price            = DefaultPrice(pos),
-                                    IsActive         = true,
-                                    CreatedAt        = DateTime.UtcNow,
-                                    LastUpdatedAt    = DateTime.UtcNow,
-                                };
-                                _db.FantasyPlayers.Add(player);
-                                existingPlayers[squadPlayer.Id] = player;
-                                added++;
-                            }
+                                ExternalPlayerId = squadPlayer.Id,
+                                Name             = squadPlayer.Name,
+                                Position         = pos,
+                                TeamId           = dbTeam.Id,
+                                Price            = DefaultPrice(pos),
+                                IsActive         = true,
+                                CreatedAt        = DateTime.UtcNow,
+                                LastUpdatedAt    = DateTime.UtcNow,
+                            };
+                            _db.FantasyPlayers.Add(player);
+                            existingPlayers[squadPlayer.Id] = player;
+                            added++;
                         }
                     }
 
-                    // Small delay to respect football-data.org rate limit (10 req/min)
-                    await Task.Delay(700, ct);
+                    // Save after each team so progress isn't lost on error
+                    await _db.SaveChangesAsync(ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to sync players for league {Code}", code);
+                    _logger.LogWarning(ex, "Failed to sync squad for team {Name}", dbTeam.Name);
                 }
             }
 
-            await _db.SaveChangesAsync(ct);
-            _logger.LogInformation("Fantasy player sync: added={Added} updated={Updated}", added, updated);
+            _logger.LogInformation("Fantasy player sync complete: added={Added} updated={Updated} teams={Teams}",
+                added, updated, callCount);
         }
 
         // ── Gameweek auto-creation from matchdays ─────────────────────
