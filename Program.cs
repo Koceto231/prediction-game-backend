@@ -2,9 +2,19 @@ using BPFL.API.BackgroundJobs;
 using BPFL.API.Config;
 using BPFL.API.Data;
 using BPFL.API.Middleware;
+using BPFL.API.Modules.AI.Application.Interfaces;
+using BPFL.API.Modules.AI.Application.UseCases;
+using BPFL.API.Modules.AI.Applications.Interfaces;
+using BPFL.API.Modules.AI.Infrastructures.Repositories;
+using BPFL.API.Modules.Odds.Application.Interfaces;
+using BPFL.API.Modules.Odds.Application.Repositories;
+using BPFL.API.Modules.Wallet.Applications.Interfaces;
+using BPFL.API.Modules.Wallet.Applications.UseCases;
+using BPFL.API.Modules.Wallet.Infrastructures.Repositories;
 using BPFL.API.Services;
 using BPFL.API.Services.Agents;
 using BPFL.API.Services.External;
+using BPFL.API.Services.FantasyServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -13,7 +23,6 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using BPFL.API.Services.FantasyServices;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -140,6 +149,23 @@ builder.Services.AddScoped<BetService>();
 
 builder.Services.AddHostedService<MatchSyncJob>();
 builder.Services.AddHostedService<PredictionScoringJob>();
+
+builder.Services.AddScoped<IWalletRepository, WalletRepository>();
+builder.Services.AddScoped<GetWallet>();
+
+builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
+builder.Services.AddScoped<ResetDemoBalanceUseCase>();
+
+builder.Services.AddScoped<IMatchMarketOddsRepository, MatchMarketOddsRepository>();
+
+builder.Services.AddScoped<IMatchContextRepository, MatchContextRepository>();
+
+builder.Services.AddScoped<IHeadToHeadRepository, HeadToHeadRepository>();
+
+builder.Services.AddScoped<GetMatchContext>();
+builder.Services.AddScoped<GetHeadToHead>();
+
+
 
 builder.Services.AddControllers();
 

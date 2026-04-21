@@ -9,6 +9,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using BPFL.API.Modules.Wallet.Domain.Entities;
+
 
 
 namespace BPFL.API.Services
@@ -91,9 +93,22 @@ namespace BPFL.API.Services
                 EmailVerificationToken = emailToken,
                 EmailVerificationTokenExpires = DateTime.UtcNow.AddMinutes(60),
                 IsEmailVerified = false
-            };
+            }; 
 
             bPFL_DBContext.Users.Add(user);
+            await bPFL_DBContext.SaveChangesAsync(ct);
+
+            var wallet = new Wallet
+            {
+                UserId = user.Id,
+                Balance = 1000m,
+                StartingBalance = 1000m,
+                UpdatedAt = DateTime.UtcNow,
+            };
+
+            
+            
+            bPFL_DBContext.Wallets.Add(wallet);
             await bPFL_DBContext.SaveChangesAsync(ct);
 
             var frontendBaseUrl = configuration["App:FrontendBaseUrl"];

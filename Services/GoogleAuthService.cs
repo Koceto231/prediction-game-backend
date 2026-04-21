@@ -1,6 +1,7 @@
 ﻿using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Models.DTO;
+using BPFL.API.Modules.Wallet.Domain.Entities;
 using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 
@@ -80,6 +81,7 @@ namespace BPFL.API.Services
             var user = await bPFL_DBContext.Users.FirstOrDefaultAsync(x => x.GoogleId == payload.Subject, ct);
             if (user != null)
             {
+                await EnsureWalletExistsAsync(user.Id, ct);
                 return user;
             }
 
@@ -91,6 +93,9 @@ namespace BPFL.API.Services
             {
                 user.GoogleId = payload.Subject;
                 await bPFL_DBContext.SaveChangesAsync(ct);
+
+                await EnsureWalletExistsAsync(user.Id, ct);
+
 
                 logger.LogInformation(
                    "Linked Google account to existing user {UserId}", user.Id);
@@ -112,6 +117,18 @@ namespace BPFL.API.Services
             bPFL_DBContext.Users.Add(user);
             await bPFL_DBContext.SaveChangesAsync(ct);
 
+            var wallet = new Wallet 
+            {
+                UserId = user.Id,
+                Balance = 1000m,
+                StartingBalance = 1000m,
+                UpdatedAt = DateTime.UtcNow
+
+            };
+
+            await bPFL_DBContext.Wallets.AddAsync(wallet, ct);
+            await bPFL_DBContext.SaveChangesAsync(ct);
+
             logger.LogInformation(
                 "Auto-registered new user {UserId} via Google ({Email})",
                 user.Id, user.Email);
@@ -121,6 +138,25 @@ namespace BPFL.API.Services
 
         }
 
+        private async Task EnsureWalletExistsAsync(int userId, CancellationToken ct = default)
+        {
+            var existingWallet = await bPFL_DBContext.Wallets
+                .FirstOrDefaultAsync(w => w.UserId == userId, ct);
+
+            if (existingWallet != null)
+                return;
+
+            var wallet = new Wallet
+            {
+                UserId = userId,
+                Balance = 1000m,
+                StartingBalance = 1000m,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            await bPFL_DBContext.Wallets.AddAsync(wallet, ct);
+            await bPFL_DBContext.SaveChangesAsync(ct);
+        }
         private string TransliterateBulgarianToLatin(string text)
         {
             if (string.IsNullOrWhiteSpace(text))

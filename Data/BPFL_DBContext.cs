@@ -1,5 +1,8 @@
 ﻿using BPFL.API.Models;
 using BPFL.API.Models.FantasyModel;
+using BPFL.API.Modules.Bettings.Domain.Entities;
+using BPFL.API.Modules.Odds.Domain.Entities;
+using BPFL.API.Modules.Wallet.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Data
@@ -32,8 +35,159 @@ namespace BPFL.API.Data
         public DbSet<FantasyScore> FantasyScores { get; set; }
         public DbSet<Bet> Bets { get; set; }
 
+        public DbSet<Wallet> Wallets { get; set; }
+        public DbSet<WalletTransaction> WalletTransactions { get; set; }
+
+        public DbSet<Bet> Bets { get; set; }
+
+        public DbSet<MarketDefinition> MarketDefinitions { get; set; }
+        public DbSet<MatchMarketOdds> MatchMarketOdds { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<MarketDefinition>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Code)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(x => x.Name)
+                    .HasMaxLength(150)
+                    .IsRequired();
+
+                entity.Property(x => x.Category)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.HasIndex(x => x.Code).IsUnique();
+            });
+
+            modelBuilder.Entity<MatchMarketOdds>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.MarketCode)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(x => x.SelectionCode)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(x => x.LineValue)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.Odds)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.UpdatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.HasOne(x => x.Match)
+                    .WithMany()
+                    .HasForeignKey(x => x.MatchId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(x => new
+                {
+                    x.MatchId,
+                    x.MarketCode,
+                    x.SelectionCode,
+                    x.PlayerId,
+                    x.LineValue
+                });
+            });
+            modelBuilder.Entity<Bet>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.MarketCode)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(x => x.SelectionCode)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(x => x.LineValue)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.Odds)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.Stake)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.PotentialReturn)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.SettledReturn)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.CreatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Match)
+                    .WithMany()
+                    .HasForeignKey(x => x.MatchId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(x => new { x.UserId, x.Status });
+                entity.HasIndex(x => new { x.MatchId, x.Status });
+            });
+
+
+            modelBuilder.Entity<Wallet>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.HasIndex(x => x.UserId).IsUnique();
+
+                entity.Property(x => x.Balance)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.StartingBalance)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.UpdatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<WalletTransaction>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.Amount)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(x => x.Type)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(x => x.Description)
+                    .HasMaxLength(500)
+                    .IsRequired();
+
+                entity.Property(x => x.CreatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+
+                entity.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
 
             modelBuilder.Entity<FantasyPlayer>()
                 .HasIndex(p => p.ExternalPlayerId)

@@ -164,7 +164,6 @@ namespace BPFL.API.Controllers
         }
 
         // ── Helpers ───────────────────────────────────────────────────
-
         private int? GetUserId()
         {
             var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
