@@ -16,11 +16,42 @@ namespace BPFL.API.Controllers
     {
         private readonly PredictionService predictionService;
         private readonly OpenRouterClient openRouterClient;
+        private readonly AIPredictionService aiPredictionService;
+        private readonly MatchAnalysisService matchAnalysisService;
+        private readonly PredictionModelService predictionModelService;
 
-        public PredictionController(PredictionService _predictionService, OpenRouterClient _openRouterClient)
+        public PredictionController(
+            PredictionService _predictionService,
+            OpenRouterClient _openRouterClient,
+            AIPredictionService _aiPredictionService,
+            MatchAnalysisService _matchAnalysisService,
+            PredictionModelService _predictionModelService)
         {
             predictionService = _predictionService;
             openRouterClient = _openRouterClient;
+            aiPredictionService = _aiPredictionService;
+            matchAnalysisService = _matchAnalysisService;
+            predictionModelService = _predictionModelService;
+        }
+
+        /// <summary>Returns an AI analysis for a match without saving a prediction.</summary>
+        [HttpGet("analysis/{matchId:int}")]
+        public async Task<IActionResult> GetMatchAnalysis(int matchId, CancellationToken ct)
+        {
+            try
+            {
+                var match = await predictionService.GetMatchForAnalysisAsync(matchId, ct);
+                if (match == null) return NotFound(new { message = "Match not found." });
+
+                var analysis = await matchAnalysisService.AnalyzeMatch(match, ct);
+                var model = predictionModelService.BuildModel(analysis);
+                var ai = await aiPredictionService.AIBuildPredictionAsync(analysis, model, ct);
+                return Ok(ai);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
         }
 
         [HttpGet("ai-status")]

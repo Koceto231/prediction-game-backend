@@ -255,5 +255,13 @@ namespace BPFL.API.Services
                     PredictionErrorType.MatchAlreadyStarted);
             }
         }
+
+        public async Task<Match?> GetMatchForAnalysisAsync(int matchId, CancellationToken ct = default)
+        {
+            return await bPFL_DBContext.Matches
+                .Include(m => m.HomeTeam)
+                .Include(m => m.AwayTeam)
+                .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+        }
     }
 }
