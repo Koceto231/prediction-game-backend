@@ -1,6 +1,5 @@
 ﻿using BPFL.API.Models;
 using BPFL.API.Models.FantasyModel;
-using BPFL.API.Modules.Odds.Domain.Entities;
 using BPFL.API.Modules.Wallet.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,65 +36,8 @@ namespace BPFL.API.Data
         public DbSet<Wallet> Wallets { get; set; }
         public DbSet<WalletTransaction> WalletTransactions { get; set; }
 
-        public DbSet<MarketDefinition> MarketDefinitions { get; set; }
-        public DbSet<MatchMarketOdds> MatchMarketOdds { get; set; }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<MarketDefinition>(entity =>
-            {
-                entity.HasKey(x => x.Id);
-
-                entity.Property(x => x.Code)
-                    .HasMaxLength(100)
-                    .IsRequired();
-
-                entity.Property(x => x.Name)
-                    .HasMaxLength(150)
-                    .IsRequired();
-
-                entity.Property(x => x.Category)
-                    .HasMaxLength(100)
-                    .IsRequired();
-
-                entity.HasIndex(x => x.Code).IsUnique();
-            });
-
-            modelBuilder.Entity<MatchMarketOdds>(entity =>
-            {
-                entity.HasKey(x => x.Id);
-
-                entity.Property(x => x.MarketCode)
-                    .HasMaxLength(100)
-                    .IsRequired();
-
-                entity.Property(x => x.SelectionCode)
-                    .HasMaxLength(100)
-                    .IsRequired();
-
-                entity.Property(x => x.LineValue)
-                    .HasColumnType("decimal(18,2)");
-
-                entity.Property(x => x.Odds)
-                    .HasColumnType("decimal(18,2)");
-
-                entity.Property(x => x.UpdatedAt)
-                    .HasDefaultValueSql("NOW()");
-
-                entity.HasOne(x => x.Match)
-                    .WithMany()
-                    .HasForeignKey(x => x.MatchId)
-                    .OnDelete(DeleteBehavior.Cascade);
-
-                entity.HasIndex(x => new
-                {
-                    x.MatchId,
-                    x.MarketCode,
-                    x.SelectionCode,
-                    x.PlayerId,
-                    x.LineValue
-                });
-            });
             modelBuilder.Entity<Bet>(entity =>
             {
                 entity.HasKey(x => x.Id);

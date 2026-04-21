@@ -6,9 +6,6 @@ using BPFL.API.Modules.AI.Application.Interfaces;
 using BPFL.API.Modules.AI.Application.UseCases;
 using BPFL.API.Modules.AI.Applications.Interfaces;
 using BPFL.API.Modules.AI.Infrastructures.Repositories;
-using BPFL.API.Modules.Odds.Application.Interfaces;
-using BPFL.API.Modules.Odds.Application.Repositories;
-using BPFL.API.Modules.Odds.Application.UseCases;
 using BPFL.API.Modules.Wallet.Applications.Interfaces;
 using BPFL.API.Modules.Wallet.Applications.UseCases;
 using BPFL.API.Modules.Wallet.Infrastructures.Repositories;
@@ -156,9 +153,6 @@ builder.Services.AddScoped<GetWallet>();
 
 builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
 builder.Services.AddScoped<ResetDemoBalanceUseCase>();
-
-builder.Services.AddScoped<IMatchMarketOddsRepository, MatchMarketOddsRepository>();
-builder.Services.AddScoped<GetMatchMarketsUseCase>();
 
 builder.Services.AddScoped<IMatchContextRepository, MatchContextRepository>();
 
