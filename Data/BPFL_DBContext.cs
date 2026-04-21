@@ -80,7 +80,7 @@ namespace BPFL.API.Data
                     .HasColumnType("decimal(18,2)");
 
                 entity.Property(x => x.UpdatedAt)
-                    .HasDefaultValueSql("GETUTCDATE()");
+                    .HasDefaultValueSql("NOW()");
 
                 entity.HasOne(x => x.Match)
                     .WithMany()
@@ -140,7 +140,7 @@ namespace BPFL.API.Data
                     .HasColumnType("decimal(18,2)");
 
                 entity.Property(x => x.UpdatedAt)
-                    .HasDefaultValueSql("GETUTCDATE()");
+                    .HasDefaultValueSql("NOW()");
 
                 entity.HasOne(x => x.User)
                     .WithMany()
@@ -164,7 +164,7 @@ namespace BPFL.API.Data
                     .IsRequired();
 
                 entity.Property(x => x.CreatedAt)
-                    .HasDefaultValueSql("GETUTCDATE()");
+                    .HasDefaultValueSql("NOW()");
 
                 entity.HasOne(x => x.User)
                     .WithMany()

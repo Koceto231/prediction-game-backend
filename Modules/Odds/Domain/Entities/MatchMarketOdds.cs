@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+﻿using BPFL.API.Models;
 
 namespace BPFL.API.Modules.Odds.Domain.Entities
 {
