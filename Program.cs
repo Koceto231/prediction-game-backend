@@ -2,13 +2,6 @@ using BPFL.API.BackgroundJobs;
 using BPFL.API.Config;
 using BPFL.API.Data;
 using BPFL.API.Middleware;
-using BPFL.API.Modules.AI.Application.Interfaces;
-using BPFL.API.Modules.AI.Application.UseCases;
-using BPFL.API.Modules.AI.Applications.Interfaces;
-using BPFL.API.Modules.AI.Infrastructures.Repositories;
-using BPFL.API.Modules.Wallet.Applications.Interfaces;
-using BPFL.API.Modules.Wallet.Applications.UseCases;
-using BPFL.API.Modules.Wallet.Infrastructures.Repositories;
 using BPFL.API.Services;
 using BPFL.API.Services.Agents;
 using BPFL.API.Services.External;
@@ -22,12 +15,9 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMemoryCache();
-
-
 
 builder.Services.AddDbContext<BPFL_DBContext>(options =>
     options.UseNpgsql(
@@ -40,11 +30,8 @@ builder.Services.AddDbContext<BPFL_DBContext>(options =>
                 errorCodesToAdd: null);
         }));
 
-string baseUrl = builder.Configuration["FootballData:BaseUrl"]!;
-string token = builder.Configuration["FootballData:Token"]!;
-
-Console.WriteLine($"[DEBUG] BaseUrl: '{baseUrl}'");
-Console.WriteLine($"[DEBUG] Token set: {!string.IsNullOrWhiteSpace(token)}");
+Console.WriteLine($"[DEBUG] BaseUrl: '{builder.Configuration["FootballData:BaseUrl"]}'");
+Console.WriteLine($"[DEBUG] Token set: {!string.IsNullOrWhiteSpace(builder.Configuration["FootballData:Token"])}");
 
 builder.Services.Configure<OpenRouterSettings>(
     builder.Configuration.GetSection("OpenRouter"));
@@ -58,8 +45,6 @@ builder.Services.AddHttpClient<OpenRouterClient>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
-builder.Services.AddScoped<MatchPredictionAgent>();
-
 builder.Services.AddHttpClient<BPFLDataClient>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["FootballData:BaseUrl"]!);
@@ -67,9 +52,7 @@ builder.Services.AddHttpClient<BPFLDataClient>(client =>
 
     var token = builder.Configuration["FootballData:Token"];
     if (!string.IsNullOrWhiteSpace(token))
-    {
         client.DefaultRequestHeaders.Add("X-Auth-Token", token);
-    }
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -94,14 +77,13 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("https://predictionfootballgame.vercel.app")
               .AllowAnyHeader()
               .AllowAnyMethod()
-             .AllowCredentials();
+              .AllowCredentials();
     });
 });
 
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -114,7 +96,6 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -122,51 +103,45 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-
-// Add services to the container.
+// ── Core services ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthServices>();
+builder.Services.AddScoped<GoogleAuthService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<ProfileService>();
+
+// ── Match / Team ─────────────────────────────────────────────────────────────
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<TeamSyncService>();
 builder.Services.AddScoped<MatchSyncService>();
 builder.Services.AddScoped<MatchService>();
-builder.Services.AddScoped<PredictionService>();
 builder.Services.AddScoped<MatchAnalysisService>();
+
+// ── Prediction / AI ──────────────────────────────────────────────────────────
+builder.Services.AddScoped<PredictionService>();
 builder.Services.AddScoped<PredictionModelService>();
 builder.Services.AddScoped<PredictionScoringService>();
 builder.Services.AddScoped<AIPredictionService>();
-builder.Services.AddScoped<LeaderboardService>();
-builder.Services.AddScoped<LeagueService>();
-builder.Services.AddScoped<GoogleAuthService>();
-builder.Services.AddScoped<EmailService>();
-builder.Services.AddScoped<ProfileService>();
-builder.Services.AddScoped<FantasyServices>();
-builder.Services.AddScoped<FantasyAutoSyncService>();
+builder.Services.AddScoped<MatchPredictionAgent>();
+
+// ── Betting / Wallet / Odds ───────────────────────────────────────────────────
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<OddsService>();
 builder.Services.AddScoped<BetService>();
 
+// ── Leagues / Leaderboard / Fantasy ──────────────────────────────────────────
+builder.Services.AddScoped<LeaderboardService>();
+builder.Services.AddScoped<LeagueService>();
+builder.Services.AddScoped<FantasyServices>();
+builder.Services.AddScoped<FantasyAutoSyncService>();
+
+// ── Background jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MatchSyncJob>();
 builder.Services.AddHostedService<PredictionScoringJob>();
 
-builder.Services.AddScoped<IWalletRepository, WalletRepository>();
-builder.Services.AddScoped<GetWallet>();
-
-builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
-builder.Services.AddScoped<ResetDemoBalanceUseCase>();
-
-builder.Services.AddScoped<IMatchContextRepository, MatchContextRepository>();
-
-builder.Services.AddScoped<IHeadToHeadRepository, HeadToHeadRepository>();
-
-builder.Services.AddScoped<GetMatchContext>();
-builder.Services.AddScoped<GetHeadToHead>();
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "BPFL API", Version = "v1" });
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -176,17 +151,12 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Enter: Bearer {your JWT token}"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             Array.Empty<string>()
         }
@@ -201,28 +171,14 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-
 app.UseRouting();
 app.UseRateLimiter();
-
-// Configure the HTTP request pipeline.
-/*
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-*/
-
 app.UseSwagger();
 app.UseSwaggerUI();
-
-
 app.UseCors("AllowFrontend");
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
