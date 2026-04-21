@@ -84,7 +84,7 @@ namespace BPFL.API.Services
                 .OrderByDescending(b => b.CreatedAt)
                 .ToListAsync(ct);
 
-            return bets.Select(b => ToDTO(b, b.Match, BuildDescription(b))).ToList();
+            return bets.Select(b => ToDTO(b, b.Match, BuildDescription(b, b.Match))).ToList();
         }
 
         public async Task ResolveMatchBetsAsync(int matchId, int homeScore, int awayScore, CancellationToken ct = default)
@@ -135,13 +135,28 @@ namespace BPFL.API.Services
             return pick == OverUnderPick.Over ? totalGoals > threshold : totalGoals < threshold;
         }
 
-        private static string BuildDescription(Bet bet) => bet.BetType switch
+        private static string BuildDescription(Bet bet, Match match) => bet.BetType switch
         {
-            BetType.Winner => bet.Pick?.ToString() ?? "Winner",
-            BetType.ExactScore => $"{bet.ScoreHome}-{bet.ScoreAway}",
-            BetType.BTTS => bet.BTTSPick == true ? "BTTS Yes" : "BTTS No",
-            BetType.OverUnder => $"{bet.OUPick} {OULabel(bet.OULine)}",
-            _ => "Bet"
+            BetType.Winner => bet.Pick switch
+            {
+                MatchWinner.Home => $"1 — {match.HomeTeam?.Name ?? "Home"}",
+                MatchWinner.Draw => "X — Draw",
+                MatchWinner.Away => $"2 — {match.AwayTeam?.Name ?? "Away"}",
+                _                => "Winner"
+            },
+            BetType.ExactScore => $"{bet.ScoreHome}–{bet.ScoreAway}",
+            BetType.BTTS       => bet.BTTSPick == true ? "BTTS Yes" : "BTTS No",
+            BetType.OverUnder  => $"{bet.OUPick} {OULabel(bet.OULine)}",
+            _                  => "Bet"
+        };
+
+        private static int MaxPoints(BetType type) => type switch
+        {
+            BetType.ExactScore => 5,
+            BetType.Winner     => 1,
+            BetType.BTTS       => 1,
+            BetType.OverUnder  => 1,
+            _                  => 0
         };
 
         private static string OULabel(OverUnderLine? line) => line switch
@@ -166,7 +181,8 @@ namespace BPFL.API.Services
             PotentialPayout = bet.PotentialPayout,
             Status = bet.Status,
             ActualPayout = bet.ActualPayout,
-            CreatedAt = bet.CreatedAt
+            CreatedAt = bet.CreatedAt,
+            MaxPoints = MaxPoints(bet.BetType)
         };
     }
 }

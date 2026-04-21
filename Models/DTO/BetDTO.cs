@@ -39,6 +39,8 @@ namespace BPFL.API.Models.DTO
         public BetStatus Status { get; set; }
         public decimal? ActualPayout { get; set; }
         public DateTime CreatedAt { get; set; }
+        /// <summary>Maximum prediction points this bet type can earn.</summary>
+        public int MaxPoints { get; set; }
     }
 
     public class BetOddsDTO
