@@ -15,8 +15,6 @@ namespace BPFL.API.Data
 
         public DbSet<User> Users { get; set; }
         public DbSet<Match> Matches { get; set; }
-        public DbSet<News> News { get; set; }
-        public DbSet<Player> Players { get; set; }
         public DbSet<Prediction> Predictions { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<Team> Teams { get; set; }
