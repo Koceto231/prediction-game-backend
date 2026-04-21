@@ -30,10 +30,12 @@ namespace BPFL.API.Services
 
         public async Task EnsureOddsForUpcomingMatchesAsync(CancellationToken ct = default)
         {
+            // Also recalculate matches that already have winner odds but are missing
+            // ExpectedHomeGoals / AwayGoals (they were computed before that column was added)
             var matches = await _db.Matches
                 .Where(m => m.Status != "FINISHED"
                          && m.MatchDate >= DateTime.UtcNow
-                         && m.HomeOdds == null)
+                         && (m.HomeOdds == null || m.ExpectedHomeGoals == null))
                 .Include(m => m.HomeTeam)
                 .Include(m => m.AwayTeam)
                 .ToListAsync(ct);
