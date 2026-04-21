@@ -153,9 +153,9 @@ namespace BPFL.API.Services
         private static int MaxPoints(BetType type) => type switch
         {
             BetType.ExactScore => 5,
-            BetType.Winner     => 1,
-            BetType.BTTS       => 1,
-            BetType.OverUnder  => 1,
+            BetType.Winner     => 3,   // part of Market Pick — up to 3 pts total
+            BetType.BTTS       => 3,
+            BetType.OverUnder  => 3,
             _                  => 0
         };
 
