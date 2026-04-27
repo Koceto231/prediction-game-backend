@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BPFL.API.Migrations
 {
+    [Microsoft.EntityFrameworkCore.Migrations.Migration("20260427130000_AddApiSportsFields")]
     public partial class AddApiSportsFields : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

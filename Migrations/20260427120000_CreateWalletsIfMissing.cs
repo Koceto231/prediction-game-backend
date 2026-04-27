@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BPFL.API.Migrations
 {
+    [Microsoft.EntityFrameworkCore.Migrations.Migration("20260427120000_CreateWalletsIfMissing")]
     public partial class CreateWalletsIfMissing : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
