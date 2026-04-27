@@ -20,9 +20,12 @@ namespace BPFL.API.Services.External
             _http = http;
             _logger = logger;
 
-            var key = config["ApiSports:ApiKey"] ?? throw new InvalidOperationException("ApiSports:ApiKey missing");
+            var key = config["ApiSports:ApiKey"];
+            if (string.IsNullOrWhiteSpace(key))
+                _logger.LogWarning("ApiSports:ApiKey is not configured — api-sports calls will fail.");
             _http.BaseAddress = new Uri("https://v3.football.api-sports.io/");
-            _http.DefaultRequestHeaders.Add("x-apisports-key", key);
+            if (!string.IsNullOrWhiteSpace(key))
+                _http.DefaultRequestHeaders.Add("x-apisports-key", key);
         }
 
         // ── Fixtures by date + league ─────────────────────────────────
