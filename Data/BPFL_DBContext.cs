@@ -1,6 +1,5 @@
 ﻿using BPFL.API.Models;
 using BPFL.API.Models.FantasyModel;
-using BPFL.API.Modules.Wallet.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Data
@@ -31,8 +30,6 @@ namespace BPFL.API.Data
         public DbSet<FantasyScore> FantasyScores { get; set; }
         public DbSet<Bet> Bets { get; set; }
 
-        public DbSet<Wallet> Wallets { get; set; }
-        public DbSet<WalletTransaction> WalletTransactions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
