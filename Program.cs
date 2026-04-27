@@ -6,6 +6,7 @@ using BPFL.API.Services;
 using BPFL.API.Services.Agents;
 using BPFL.API.Services.External;
 using BPFL.API.Services.FantasyServices;
+using BPFL.API.Services.MatchServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -139,8 +140,8 @@ builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<LeagueService>();
 builder.Services.AddScoped<FantasyServices>();
 builder.Services.AddScoped<FantasyAutoSyncService>();
-builder.Services.AddScoped<ApiSportsPlayerSeedService>();
-builder.Services.AddHttpClient<ApiSportsClient>();
+builder.Services.AddScoped<SportmonksMatchSyncService>();
+builder.Services.AddHttpClient<SportmonksClient>();
 
 // ── Background jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MatchSyncJob>();
