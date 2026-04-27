@@ -212,61 +212,62 @@ namespace BPFL.API.Services.FantasyServices
                 .FirstOrDefaultAsync(m => m.Id == internalMatchId, ct);
             if (match == null) return;
 
-            // Resolve api-sports fixture ID
-            int? fixtureId = match.ApiSportsFixtureId;
-            if (fixtureId == null)
+            // Find api-sports fixture by date across all configured leagues
+            var date   = DateOnly.FromDateTime(match.MatchDate.ToUniversalTime());
+            int season = date.Month >= 7 ? date.Year : date.Year - 1;
+
+            int? fixtureId = null;
+            var homeWord = match.HomeTeam.Name.Split(' ')[0];
+            var awayWord = match.AwayTeam.Name.Split(' ')[0];
+
+            foreach (var leagueId in ApiSportsPlayerSeedService.LeagueMap.Values)
             {
-                fixtureId = await ResolveFixtureIdAsync(match, ct);
-                if (fixtureId != null)
-                {
-                    match.ApiSportsFixtureId = fixtureId;
-                    await _db.SaveChangesAsync(ct);
-                }
+                var responses = await _apiSports.GetFixturesByDateAsync(date, leagueId, season, ct);
+                var match_ = responses.FirstOrDefault(r =>
+                    (r.Teams?.Home?.Name?.Contains(homeWord, StringComparison.OrdinalIgnoreCase) == true ||
+                     r.Teams?.Away?.Name?.Contains(awayWord, StringComparison.OrdinalIgnoreCase) == true));
+
+                if (match_ != null) { fixtureId = match_.Fixture.Id; break; }
             }
 
             if (fixtureId == null)
             {
-                _logger.LogWarning("Could not resolve api-sports fixture for match {Id} — skipping", internalMatchId);
+                _logger.LogWarning("Could not find api-sports fixture for match {Id} on {Date}", internalMatchId, date);
                 return;
             }
 
             var teamStats = await _apiSports.GetFixturePlayersAsync(fixtureId.Value, ct);
             if (teamStats.Count == 0)
             {
-                _logger.LogWarning("No player stats from api-sports for fixture {FixtureId}", fixtureId);
+                _logger.LogWarning("No player stats from api-sports for fixture {Id}", fixtureId);
                 return;
             }
 
-            // Load all FantasyPlayers that have an ApiSportsPlayerId
-            var apiIds = teamStats
-                .SelectMany(t => t.Players)
-                .Select(p => p.Player.Id)
-                .Distinct()
-                .ToList();
-
-            var players = await _db.FantasyPlayers.AsNoTracking()
-                .Where(p => p.ApiSportsPlayerId != null && apiIds.Contains(p.ApiSportsPlayerId!.Value))
-                .ToDictionaryAsync(p => p.ApiSportsPlayerId!.Value, p => p, ct);
+            // Load all FantasyPlayers for name matching
+            var allPlayers = await _db.FantasyPlayers.AsNoTracking().ToListAsync(ct);
+            var playerByName = allPlayers
+                .GroupBy(p => NormaliseName(p.Name))
+                .ToDictionary(g => g.Key, g => g.First());
 
             int recorded = 0;
             foreach (var team in teamStats)
             {
                 foreach (var entry in team.Players)
                 {
-                    if (!players.TryGetValue(entry.Player.Id, out var player)) continue;
-
                     var stats = entry.Statistics.FirstOrDefault();
                     if (stats == null) continue;
 
-                    int minutes  = stats.Games.Minutes ?? 0;
-                    bool played  = minutes > 0;
-                    int goals    = stats.Goals.Total ?? 0;
-                    int assists  = stats.Goals.Assists ?? 0;
-                    int yellows  = stats.Cards.Yellow ?? 0;
-                    int reds     = stats.Cards.Red ?? 0;
-                    int conceded = stats.Goals.Conceded ?? 0;
+                    int minutes = stats.Games.Minutes ?? 0;
+                    bool played = minutes > 0;
+                    int goals   = stats.Goals.Total ?? 0;
+                    int assists = stats.Goals.Assists ?? 0;
+                    int yellows = stats.Cards.Yellow ?? 0;
+                    int reds    = stats.Cards.Red ?? 0;
 
                     if (!played && goals == 0 && assists == 0 && yellows == 0 && reds == 0) continue;
+
+                    var player = FindPlayer(playerByName, entry.Player.Name);
+                    if (player == null) continue;
 
                     int pts = FantasyServices.CalculatePlayerPoints(
                         player.Position, played, goals, assists, yellows, reds);
@@ -292,26 +293,18 @@ namespace BPFL.API.Services.FantasyServices
             _logger.LogInformation("Recorded api-sports stats for match {Id}: {Count} players", internalMatchId, recorded);
         }
 
-        private async Task<int?> ResolveFixtureIdAsync(Models.Match match, CancellationToken ct)
+        private static string NormaliseName(string name) =>
+            name.ToLowerInvariant().Replace("-", " ").Replace(".", "").Trim();
+
+        private static Models.FantasyModel.FantasyPlayer? FindPlayer(
+            Dictionary<string, Models.FantasyModel.FantasyPlayer> dict, string apiName)
         {
-            var leagueCode = match.LeagueCode;
-            var candidateLeagues = leagueCode != null && ApiSportsPlayerSeedService.LeagueMap.TryGetValue(leagueCode, out var id)
-                ? [(leagueCode, id)]
-                : ApiSportsPlayerSeedService.LeagueMap.Select(kv => (kv.Key, kv.Value)).ToArray();
-
-            var date = DateOnly.FromDateTime(match.MatchDate.ToUniversalTime());
-            int season = date.Month >= 7 ? date.Year : date.Year - 1;
-
-            foreach (var (_, leagueId) in candidateLeagues)
-            {
-                var fixtures = await _apiSports.GetFixturesByDateAsync(date, leagueId, season, ct);
-                foreach (var fixture in fixtures)
-                {
-                    _logger.LogDebug("Found api-sports fixture {Id} for match {MatchId}", fixture.Id, match.Id);
-                    return fixture.Id;
-                }
-            }
-            return null;
+            var norm = NormaliseName(apiName);
+            if (dict.TryGetValue(norm, out var exact)) return exact;
+            // Try last-name match
+            var lastName = norm.Split(' ').Last();
+            return dict.Values.FirstOrDefault(p =>
+                NormaliseName(p.Name).EndsWith(lastName, StringComparison.OrdinalIgnoreCase));
         }
 
         // ── Full auto-score for a finished gameweek ───────────────────

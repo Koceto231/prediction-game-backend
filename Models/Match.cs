@@ -8,9 +8,6 @@ namespace BPFL.API.Models
 
         public int ExternalId { get; set; }
 
-        public int? ApiSportsFixtureId { get; set; }
-
-        public string? LeagueCode { get; set; }
 
         [Required]
         public int HomeTeamId { get; set; }

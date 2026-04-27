@@ -73,14 +73,12 @@ namespace BPFL.API.Services.FantasyServices
                     var pos = MapPosition(apiPlayer.Position);
                     var price = DefaultPrice(pos);
 
-                    // Check if player already exists by api-sports ID
+                    // Check if player already exists by name + team
                     var existing = await _db.FantasyPlayers
-                        .FirstOrDefaultAsync(p => p.ApiSportsPlayerId == apiPlayer.Id, ct);
+                        .FirstOrDefaultAsync(p => p.Name == apiPlayer.Name && p.TeamId == dbTeam.Id, ct);
 
                     if (existing != null)
                     {
-                        // Update team and position if changed
-                        existing.TeamId = dbTeam.Id;
                         existing.Position = pos;
                         existing.LastUpdatedAt = DateTime.UtcNow;
                         playersUpdated++;
@@ -89,15 +87,14 @@ namespace BPFL.API.Services.FantasyServices
                     {
                         _db.FantasyPlayers.Add(new FantasyPlayer
                         {
-                            ApiSportsPlayerId = apiPlayer.Id,
-                            ExternalPlayerId  = 0,
-                            Name              = apiPlayer.Name,
-                            Position          = pos,
-                            TeamId            = dbTeam.Id,
-                            Price             = price,
-                            IsActive          = true,
-                            CreatedAt         = DateTime.UtcNow,
-                            LastUpdatedAt     = DateTime.UtcNow,
+                            ExternalPlayerId = 0,
+                            Name             = apiPlayer.Name,
+                            Position         = pos,
+                            TeamId           = dbTeam.Id,
+                            Price            = price,
+                            IsActive         = true,
+                            CreatedAt        = DateTime.UtcNow,
+                            LastUpdatedAt    = DateTime.UtcNow,
                         });
                         playersAdded++;
                     }

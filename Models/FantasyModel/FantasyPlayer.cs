@@ -6,8 +6,6 @@
 
         public int ExternalPlayerId { get; set; }
 
-        public int? ApiSportsPlayerId { get; set; }
-
         public string Name { get; set; } = null!;
 
         public enum FantasyPosition 

@@ -27,12 +27,12 @@ namespace BPFL.API.Services.External
 
         // ── Fixtures by date + league ─────────────────────────────────
 
-        public async Task<List<ApiSportsFixture>> GetFixturesByDateAsync(
+        public async Task<List<ApiSportsFixtureResponse>> GetFixturesByDateAsync(
             DateOnly date, int leagueId, int season, CancellationToken ct = default)
         {
             var url = $"fixtures?date={date:yyyy-MM-dd}&league={leagueId}&season={season}";
             var root = await GetAsync<ApiSportsRoot<ApiSportsFixtureResponse>>(url, ct);
-            return root?.Response?.Select(r => r.Fixture).ToList() ?? [];
+            return root?.Response ?? [];
         }
 
         // ── Player stats for a fixture ────────────────────────────────
