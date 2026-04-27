@@ -85,13 +85,26 @@ namespace BPFL.API.Services.External
         {
             try
             {
+                _logger.LogInformation("ApiSports GET {BaseUrl}{Url}", _http.BaseAddress, url);
                 var resp = await _http.GetAsync(url, ct);
+                var body = await resp.Content.ReadAsStringAsync(ct);
+
                 if (!resp.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("ApiSports {Url} returned {Status}", url, resp.StatusCode);
+                    _logger.LogWarning("ApiSports {Url} returned {Status}: {Body}", url, resp.StatusCode, body);
                     return default;
                 }
-                var body = await resp.Content.ReadAsStringAsync(ct);
+
+                // Log errors array from api-sports if present
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("errors", out var errors) &&
+                    errors.ValueKind != JsonValueKind.Array ||
+                    (errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0) ||
+                    (errors.ValueKind == JsonValueKind.Object && errors.EnumerateObject().Any()))
+                {
+                    _logger.LogWarning("ApiSports errors in {Url}: {Errors}", url, errors.ToString());
+                }
+
                 return JsonSerializer.Deserialize<T>(body, _json);
             }
             catch (Exception ex)
