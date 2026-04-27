@@ -15,6 +15,9 @@ using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
+
+
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMemoryCache();
@@ -28,7 +31,10 @@ builder.Services.AddDbContext<BPFL_DBContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorCodesToAdd: null);
-        }));
+      }));
+
+
+
 
 Console.WriteLine($"[DEBUG] BaseUrl: '{builder.Configuration["FootballData:BaseUrl"]}'");
 Console.WriteLine($"[DEBUG] Token set: {!string.IsNullOrWhiteSpace(builder.Configuration["FootballData:Token"])}");
@@ -133,6 +139,8 @@ builder.Services.AddScoped<LeaderboardService>();
 builder.Services.AddScoped<LeagueService>();
 builder.Services.AddScoped<FantasyServices>();
 builder.Services.AddScoped<FantasyAutoSyncService>();
+builder.Services.AddScoped<ApiSportsPlayerSeedService>();
+builder.Services.AddHttpClient<ApiSportsClient>();
 
 // ── Background jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MatchSyncJob>();

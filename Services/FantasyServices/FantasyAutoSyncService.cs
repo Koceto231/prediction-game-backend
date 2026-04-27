@@ -5,25 +5,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Services.FantasyServices
 {
-    /// <summary>
-    /// Automatically syncs fantasy players from squad data, creates gameweeks per matchday,
-    /// and calculates player match stats from football-data.org match details.
-    /// </summary>
     public class FantasyAutoSyncService
     {
         private readonly BPFL_DBContext _db;
         private readonly BPFLDataClient _dataClient;
+        private readonly ApiSportsClient _apiSports;
         private readonly FantasyServices _fantasyServices;
         private readonly ILogger<FantasyAutoSyncService> _logger;
 
         public FantasyAutoSyncService(
             BPFL_DBContext db,
             BPFLDataClient dataClient,
+            ApiSportsClient apiSports,
             FantasyServices fantasyServices,
             ILogger<FantasyAutoSyncService> logger)
         {
             _db = db;
             _dataClient = dataClient;
+            _apiSports = apiSports;
             _fantasyServices = fantasyServices;
             _logger = logger;
         }
@@ -199,102 +198,120 @@ namespace BPFL.API.Services.FantasyServices
             }
         }
 
-        // ── Match stats sync (goals / assists / bookings) ─────────────
+        // ── Match stats sync via api-sports ──────────────────────────
 
-        /// <summary>
-        /// Fetch match detail from football-data.org and create/update PlayerMatchFantasyStats.
-        /// Only players with recorded events (goal / assist / booking) are scored.
-        /// Safe to call repeatedly — skips if stats already finalised for this match.
-        /// </summary>
         public async Task SyncMatchStatsAsync(int internalMatchId, int externalMatchId, CancellationToken ct = default)
         {
-            // Already processed?
             bool alreadyDone = await _db.PlayerMatchFantasyStats
                 .AnyAsync(s => s.MatchId == internalMatchId, ct);
-            if (alreadyDone)
-            {
-                _logger.LogDebug("Fantasy stats already recorded for match {Id}", internalMatchId);
-                return;
-            }
+            if (alreadyDone) return;
 
-            var detail = await _dataClient.GetMatchDetailAsync(externalMatchId, ct);
-            if (detail == null)
-            {
-                _logger.LogWarning("No match detail returned for externalId={Id}", externalMatchId);
-                return;
-            }
+            var match = await _db.Matches
+                .Include(m => m.HomeTeam)
+                .Include(m => m.AwayTeam)
+                .FirstOrDefaultAsync(m => m.Id == internalMatchId, ct);
+            if (match == null) return;
 
-            // Build event map: externalPlayerId → (goals, assists, yellowCards, redCards)
-            var events = new Dictionary<int, (int goals, int assists, int yellows, int reds)>();
-
-            foreach (var goal in detail.Goals)
+            // Resolve api-sports fixture ID
+            int? fixtureId = match.ApiSportsFixtureId;
+            if (fixtureId == null)
             {
-                if (goal.Scorer?.Id > 0)
+                fixtureId = await ResolveFixtureIdAsync(match, ct);
+                if (fixtureId != null)
                 {
-                    var id = goal.Scorer.Id;
-                    var ev = events.GetValueOrDefault(id);
-                    events[id] = (ev.goals + 1, ev.assists, ev.yellows, ev.reds);
-                }
-                if (goal.Assist?.Id > 0)
-                {
-                    var id = goal.Assist.Id;
-                    var ev = events.GetValueOrDefault(id);
-                    events[id] = (ev.goals, ev.assists + 1, ev.yellows, ev.reds);
+                    match.ApiSportsFixtureId = fixtureId;
+                    await _db.SaveChangesAsync(ct);
                 }
             }
 
-            foreach (var booking in detail.Bookings)
+            if (fixtureId == null)
             {
-                if (booking.Player?.Id > 0)
-                {
-                    var id = booking.Player.Id;
-                    var ev = events.GetValueOrDefault(id);
-                    bool isRed = booking.Card?.Contains("RED", StringComparison.OrdinalIgnoreCase) == true;
-                    events[id] = isRed
-                        ? (ev.goals, ev.assists, ev.yellows, ev.reds + 1)
-                        : (ev.goals, ev.assists, ev.yellows + 1, ev.reds);
-                }
-            }
-
-            if (events.Count == 0)
-            {
-                _logger.LogInformation("No events found in match {ExternalId} — skipping fantasy stats", externalMatchId);
+                _logger.LogWarning("Could not resolve api-sports fixture for match {Id} — skipping", internalMatchId);
                 return;
             }
 
-            // Map external player IDs to FantasyPlayer records
-            var extIds = events.Keys.ToList();
+            var teamStats = await _apiSports.GetFixturePlayersAsync(fixtureId.Value, ct);
+            if (teamStats.Count == 0)
+            {
+                _logger.LogWarning("No player stats from api-sports for fixture {FixtureId}", fixtureId);
+                return;
+            }
+
+            // Load all FantasyPlayers that have an ApiSportsPlayerId
+            var apiIds = teamStats
+                .SelectMany(t => t.Players)
+                .Select(p => p.Player.Id)
+                .Distinct()
+                .ToList();
+
             var players = await _db.FantasyPlayers.AsNoTracking()
-                .Where(p => extIds.Contains(p.ExternalPlayerId))
-                .ToDictionaryAsync(p => p.ExternalPlayerId, p => p, ct);
+                .Where(p => p.ApiSportsPlayerId != null && apiIds.Contains(p.ApiSportsPlayerId!.Value))
+                .ToDictionaryAsync(p => p.ApiSportsPlayerId!.Value, p => p, ct);
 
             int recorded = 0;
-            foreach (var (extId, ev) in events)
+            foreach (var team in teamStats)
             {
-                if (!players.TryGetValue(extId, out var player)) continue;
-
-                int pts = FantasyServices.CalculatePlayerPoints(
-                    player.Position, appeared: true, ev.goals, ev.assists, ev.yellows, ev.reds);
-
-                _db.PlayerMatchFantasyStats.Add(new PlayerMatchFantasyStat
+                foreach (var entry in team.Players)
                 {
-                    FantasyPlayerId = player.Id,
-                    MatchId         = internalMatchId,
-                    IsHeAppeard     = true,
-                    Goals           = ev.goals,
-                    Assists         = ev.assists,
-                    YellowCards     = ev.yellows,
-                    RedCard         = ev.reds,
-                    FantasyPoints   = pts,
-                    CreatedAt       = DateTime.UtcNow,
-                    LastUpdatedAt   = DateTime.UtcNow,
-                });
-                recorded++;
+                    if (!players.TryGetValue(entry.Player.Id, out var player)) continue;
+
+                    var stats = entry.Statistics.FirstOrDefault();
+                    if (stats == null) continue;
+
+                    int minutes  = stats.Games.Minutes ?? 0;
+                    bool played  = minutes > 0;
+                    int goals    = stats.Goals.Total ?? 0;
+                    int assists  = stats.Goals.Assists ?? 0;
+                    int yellows  = stats.Cards.Yellow ?? 0;
+                    int reds     = stats.Cards.Red ?? 0;
+                    int conceded = stats.Goals.Conceded ?? 0;
+
+                    if (!played && goals == 0 && assists == 0 && yellows == 0 && reds == 0) continue;
+
+                    int pts = FantasyServices.CalculatePlayerPoints(
+                        player.Position, played, goals, assists, yellows, reds);
+
+                    _db.PlayerMatchFantasyStats.Add(new PlayerMatchFantasyStat
+                    {
+                        FantasyPlayerId = player.Id,
+                        MatchId         = internalMatchId,
+                        IsHeAppeard     = played,
+                        Goals           = goals,
+                        Assists         = assists,
+                        YellowCards     = yellows,
+                        RedCard         = reds,
+                        FantasyPoints   = pts,
+                        CreatedAt       = DateTime.UtcNow,
+                        LastUpdatedAt   = DateTime.UtcNow,
+                    });
+                    recorded++;
+                }
             }
 
             await _db.SaveChangesAsync(ct);
-            _logger.LogInformation(
-                "Recorded fantasy stats for match {Id}: {Count} players", internalMatchId, recorded);
+            _logger.LogInformation("Recorded api-sports stats for match {Id}: {Count} players", internalMatchId, recorded);
+        }
+
+        private async Task<int?> ResolveFixtureIdAsync(Models.Match match, CancellationToken ct)
+        {
+            var leagueCode = match.LeagueCode;
+            var candidateLeagues = leagueCode != null && ApiSportsPlayerSeedService.LeagueMap.TryGetValue(leagueCode, out var id)
+                ? [(leagueCode, id)]
+                : ApiSportsPlayerSeedService.LeagueMap.Select(kv => (kv.Key, kv.Value)).ToArray();
+
+            var date = DateOnly.FromDateTime(match.MatchDate.ToUniversalTime());
+            int season = date.Month >= 7 ? date.Year : date.Year - 1;
+
+            foreach (var (_, leagueId) in candidateLeagues)
+            {
+                var fixtures = await _apiSports.GetFixturesByDateAsync(date, leagueId, season, ct);
+                foreach (var fixture in fixtures)
+                {
+                    _logger.LogDebug("Found api-sports fixture {Id} for match {MatchId}", fixture.Id, match.Id);
+                    return fixture.Id;
+                }
+            }
+            return null;
         }
 
         // ── Full auto-score for a finished gameweek ───────────────────
