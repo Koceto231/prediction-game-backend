@@ -64,50 +64,6 @@ namespace BPFL.API.Data
             });
 
 
-            modelBuilder.Entity<Wallet>(entity =>
-            {
-                entity.HasKey(x => x.Id);
-
-                entity.HasIndex(x => x.UserId).IsUnique();
-
-                entity.Property(x => x.Balance)
-                    .HasColumnType("decimal(18,2)");
-
-                entity.Property(x => x.StartingBalance)
-                    .HasColumnType("decimal(18,2)");
-
-                entity.Property(x => x.UpdatedAt)
-                    .HasDefaultValueSql("NOW()");
-
-                entity.HasOne(x => x.User)
-                    .WithMany()
-                    .HasForeignKey(x => x.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
-
-            modelBuilder.Entity<WalletTransaction>(entity =>
-            {
-                entity.HasKey(x => x.Id);
-
-                entity.Property(x => x.Amount)
-                    .HasColumnType("decimal(18,2)");
-
-                entity.Property(x => x.Type)
-                    .HasMaxLength(50)
-                    .IsRequired();
-
-                entity.Property(x => x.Description)
-                    .HasMaxLength(500)
-                    .IsRequired();
-
-                entity.Property(x => x.CreatedAt)
-                    .HasDefaultValueSql("NOW()");
-
-                entity.HasOne(x => x.User)
-                    .WithMany()
-                    .HasForeignKey(x => x.UserId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
 
             modelBuilder.Entity<FantasyPlayer>()
                 .HasIndex(p => p.ExternalPlayerId)
