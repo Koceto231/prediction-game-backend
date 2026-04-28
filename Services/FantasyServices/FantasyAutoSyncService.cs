@@ -187,9 +187,7 @@ namespace BPFL.API.Services.FantasyServices
                                 ?? sp.Player?.Name;
                         if (string.IsNullOrWhiteSpace(name)) continue;
 
-                        // position_id lives on the player object in Sportmonks v3
-                        var posId = sp.Player?.PositionId ?? sp.PositionId;
-                        var pos = MapPositionById(posId);
+                        var pos = MapSportmonksPosition(sp);
 
                         var existing = await _db.FantasyPlayers
                             .FirstOrDefaultAsync(p => p.ExternalPlayerId == sp.PlayerId, ct);
@@ -234,15 +232,35 @@ namespace BPFL.API.Services.FantasyServices
             _logger.LogInformation("Sportmonks player sync done: added={A} updated={U}", added, updated);
         }
 
-        // Sportmonks position_id → FantasyPosition
-        private static FantasyPlayer.FantasyPosition MapPositionById(int? posId) => posId switch
+        // Map Sportmonks squad entry → FantasyPosition
+        // Priority: position name string → position_id → default MID
+        private static FantasyPlayer.FantasyPosition MapSportmonksPosition(BPFL.API.Services.External.SmSquadPlayer sp)
         {
-            1 => FantasyPlayer.FantasyPosition.GK,
-            2 => FantasyPlayer.FantasyPosition.DEF,
-            3 => FantasyPlayer.FantasyPosition.MID,
-            4 => FantasyPlayer.FantasyPosition.FWD,
-            _ => FantasyPlayer.FantasyPosition.MID,
-        };
+            // 1. Try position name from include=player.position
+            var name = sp.Player?.Position?.Name ?? sp.Player?.Position?.Code;
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name.ToLowerInvariant() switch
+                {
+                    var n when n.Contains("goalkeeper") || n.Contains("keeper") => FantasyPlayer.FantasyPosition.GK,
+                    var n when n.Contains("defender") || n.Contains("back") || n.Contains("centre-back") => FantasyPlayer.FantasyPosition.DEF,
+                    var n when n.Contains("midfielder") || n.Contains("midfield") => FantasyPlayer.FantasyPosition.MID,
+                    var n when n.Contains("attacker") || n.Contains("forward") || n.Contains("striker") || n.Contains("winger") => FantasyPlayer.FantasyPosition.FWD,
+                    _ => FantasyPlayer.FantasyPosition.MID
+                };
+            }
+
+            // 2. Try position_id (1=GK, 2=DEF, 3=MID, 4=ATT in Sportmonks general positions)
+            var posId = sp.Player?.PositionId ?? sp.PositionId;
+            return posId switch
+            {
+                1 => FantasyPlayer.FantasyPosition.GK,
+                2 => FantasyPlayer.FantasyPosition.DEF,
+                3 => FantasyPlayer.FantasyPosition.MID,
+                4 => FantasyPlayer.FantasyPosition.FWD,
+                _ => FantasyPlayer.FantasyPosition.MID
+            };
+        }
 
         // ── Gameweek auto-creation from matchdays ─────────────────────
 

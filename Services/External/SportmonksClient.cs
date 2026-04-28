@@ -91,7 +91,7 @@ namespace BPFL.API.Services.External
                 if (ct.IsCancellationRequested) break;
 
                 var url = $"fixtures/between/{from:yyyy-MM-dd}/{to:yyyy-MM-dd}" +
-                          $"?filters=leagueIds:{leagueId}" +
+                          $"?filters=leagueId:{leagueId}" +
                           $"&include=participants;scores&per_page=100&page={page}";
 
                 var root = await GetAsync<SmPaginatedRoot<SmFixture>>(url, ct);
@@ -99,10 +99,11 @@ namespace BPFL.API.Services.External
 
                 all.AddRange(root.Data);
 
-                if (root.Pagination == null || page >= root.Pagination.LastPage) break;
+                var hasMore = root.Pagination?.HasMore ?? false;
+                if (!hasMore) break;
                 page++;
 
-                await Task.Delay(300, ct); // be kind to the API
+                await Task.Delay(300, ct);
             }
 
             return all;
@@ -114,7 +115,7 @@ namespace BPFL.API.Services.External
             int teamId, CancellationToken ct = default)
         {
             var root = await GetAsync<SmRoot<SmSquadPlayer>>(
-                $"squads/teams/{teamId}?include=player", ct);
+                $"squads/teams/{teamId}?include=player;player.position", ct);
             return root?.Data ?? [];
         }
 
@@ -165,8 +166,8 @@ namespace BPFL.API.Services.External
         public int PerPage { get; set; }
         [JsonPropertyName("current_page")]
         public int CurrentPage { get; set; }
-        [JsonPropertyName("last_page")]
-        public int LastPage { get; set; }
+        [JsonPropertyName("has_more")]
+        public bool HasMore { get; set; }
     }
 
     public class SmSingleRoot<T>
@@ -308,8 +309,17 @@ namespace BPFL.API.Services.External
         [JsonPropertyName("common_name")]
         public string? CommonName { get; set; }
 
-        // General position: 1=GK, 2=DEF, 3=MID, 4=ATT
         [JsonPropertyName("position_id")]
         public int? PositionId { get; set; }
+
+        // Populated when include=player.position
+        public SmPositionType? Position { get; set; }
+    }
+
+    public class SmPositionType
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }  // "Goalkeeper", "Defender", "Midfielder", "Attacker"
+        public string? Code { get; set; }  // "goalkeeper", "defender", "midfielder", "attacker"
     }
 }
