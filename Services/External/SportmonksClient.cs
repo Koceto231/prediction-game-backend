@@ -84,7 +84,7 @@ namespace BPFL.API.Services.External
             int teamId, CancellationToken ct = default)
         {
             var root = await GetAsync<SmRoot<SmSquadPlayer>>(
-                $"squads/teams/{teamId}?include=players", ct);
+                $"squads/teams/{teamId}?include=player", ct);
             return root?.Data ?? [];
         }
 
