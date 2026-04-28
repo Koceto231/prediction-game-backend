@@ -281,20 +281,21 @@ namespace BPFL.API.Services.FantasyServices
             3  => FantasyPlayer.FantasyPosition.MID,
             4  => FantasyPlayer.FantasyPosition.FWD,
 
-            // Sportmonks v3 detailed position type IDs
+            // Sportmonks v3 actual position IDs (confirmed from API)
             24 => FantasyPlayer.FantasyPosition.GK,   // Goalkeeper
-            25 => FantasyPlayer.FantasyPosition.DEF,  // Centre Back
-            26 => FantasyPlayer.FantasyPosition.MID,  // Defensive Midfielder
-            27 => FantasyPlayer.FantasyPosition.MID,  // Central Midfielder
-            28 => FantasyPlayer.FantasyPosition.MID,  // Attacking Midfielder
-            29 => FantasyPlayer.FantasyPosition.MID,  // Right Midfielder
-            30 => FantasyPlayer.FantasyPosition.MID,  // Left Midfielder
-            31 => FantasyPlayer.FantasyPosition.FWD,  // Right Winger
-            32 => FantasyPlayer.FantasyPosition.FWD,  // Left Winger
-            33 => FantasyPlayer.FantasyPosition.FWD,  // Centre Forward
-            34 => FantasyPlayer.FantasyPosition.FWD,  // Second Striker
-            35 => FantasyPlayer.FantasyPosition.DEF,  // Left Back
-            36 => FantasyPlayer.FantasyPosition.DEF,  // Right Back
+            25 => FantasyPlayer.FantasyPosition.DEF,  // Defender
+            26 => FantasyPlayer.FantasyPosition.MID,  // Midfielder
+            27 => FantasyPlayer.FantasyPosition.FWD,  // Attacker ← key fix
+            // Extended detailed IDs (just in case)
+            28 => FantasyPlayer.FantasyPosition.MID,
+            29 => FantasyPlayer.FantasyPosition.MID,
+            30 => FantasyPlayer.FantasyPosition.MID,
+            31 => FantasyPlayer.FantasyPosition.FWD,
+            32 => FantasyPlayer.FantasyPosition.FWD,
+            33 => FantasyPlayer.FantasyPosition.FWD,
+            34 => FantasyPlayer.FantasyPosition.FWD,
+            35 => FantasyPlayer.FantasyPosition.DEF,
+            36 => FantasyPlayer.FantasyPosition.DEF,
 
             // Alternative Sportmonks ID set (type-based)
             148 => FantasyPlayer.FantasyPosition.GK,
