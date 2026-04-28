@@ -49,6 +49,28 @@ namespace BPFL.API.Controllers
             }
         }
 
+        // ── Historical match import ───────────────────────────────────
+
+        /// <summary>
+        /// Import finished matches going back daysBack days via Sportmonks fixtures/between endpoint.
+        /// </summary>
+        [HttpPost("matches/history")]
+        public async Task<IActionResult> ImportHistory(
+            [FromQuery] string leagueCode = "BGL",
+            [FromQuery] int daysBack = 365,
+            CancellationToken ct = default)
+        {
+            try
+            {
+                var (added, updated) = await _sportmonks.SyncLeagueHistoryAsync(leagueCode, daysBack, ct);
+                return Ok(new { added, updated, message = $"History sync done for {leagueCode} ({daysBack} days back)." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         // ── Deduplicate matches ───────────────────────────────────────
 
         /// <summary>

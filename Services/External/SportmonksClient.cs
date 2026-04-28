@@ -78,6 +78,36 @@ namespace BPFL.API.Services.External
             return root?.Data?.Statistics ?? [];
         }
 
+        // ── Fixtures between two dates (historical bulk import) ──────
+
+        public async Task<List<SmFixture>> GetFixturesBetweenAsync(
+            DateOnly from, DateOnly to, int leagueId, CancellationToken ct = default)
+        {
+            var all = new List<SmFixture>();
+            int page = 1;
+
+            while (true)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                var url = $"fixtures/between/{from:yyyy-MM-dd}/{to:yyyy-MM-dd}" +
+                          $"?filters=leagueIds:{leagueId}" +
+                          $"&include=participants;scores&per_page=100&page={page}";
+
+                var root = await GetAsync<SmPaginatedRoot<SmFixture>>(url, ct);
+                if (root?.Data == null || root.Data.Count == 0) break;
+
+                all.AddRange(root.Data);
+
+                if (root.Pagination == null || page >= root.Pagination.LastPage) break;
+                page++;
+
+                await Task.Delay(300, ct); // be kind to the API
+            }
+
+            return all;
+        }
+
         // ── Squad for a team ──────────────────────────────────────────
 
         public async Task<List<SmSquadPlayer>> GetSquadByTeamIdAsync(
@@ -120,6 +150,23 @@ namespace BPFL.API.Services.External
     public class SmRoot<T>
     {
         public List<T> Data { get; set; } = [];
+    }
+
+    public class SmPaginatedRoot<T>
+    {
+        public List<T> Data { get; set; } = [];
+        public SmPagination? Pagination { get; set; }
+    }
+
+    public class SmPagination
+    {
+        public int Count { get; set; }
+        [JsonPropertyName("per_page")]
+        public int PerPage { get; set; }
+        [JsonPropertyName("current_page")]
+        public int CurrentPage { get; set; }
+        [JsonPropertyName("last_page")]
+        public int LastPage { get; set; }
     }
 
     public class SmSingleRoot<T>

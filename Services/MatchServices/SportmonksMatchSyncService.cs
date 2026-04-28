@@ -48,70 +48,8 @@ namespace BPFL.API.Services.MatchServices
                 {
                     try
                     {
-                        var home = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "home");
-                        var away = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "away");
-                        if (home == null || away == null) continue;
-
-                        var homeTeam = await EnsureTeamAsync(home, ct);
-                        var awayTeam = await EnsureTeamAsync(away, ct);
-
-                        if (!DateTime.TryParse(fixture.StartingAt, out var matchDate)) continue;
-                        matchDate = DateTime.SpecifyKind(matchDate, DateTimeKind.Utc);
-
-                        var status = fixture.StateId == StateFinished ? "FINISHED" : "TIMED";
-
-                        // Final score from CURRENT entries
-                        var homeScore = fixture.Scores
-                            .FirstOrDefault(s => s.Description == "CURRENT" && s.Score?.Participant == "home")
-                            ?.Score?.Goals;
-                        var awayScore = fixture.Scores
-                            .FirstOrDefault(s => s.Description == "CURRENT" && s.Score?.Participant == "away")
-                            ?.Score?.Goals;
-
-                        // 1. Match by Sportmonks fixture ID
-                        var existing = await _db.Matches
-                            .FirstOrDefaultAsync(m => m.ExternalId == fixture.Id, ct);
-
-                        // 2. Fallback: same teams on the same calendar day (dedup football-data.org imports)
-                        if (existing == null)
-                        {
-                            var dayStart = matchDate.Date;
-                            var dayEnd   = dayStart.AddDays(1);
-                            existing = await _db.Matches.FirstOrDefaultAsync(m =>
-                                m.HomeTeamId == homeTeam.Id &&
-                                m.AwayTeamId == awayTeam.Id &&
-                                m.MatchDate  >= dayStart &&
-                                m.MatchDate  <  dayEnd, ct);
-
-                            // Adopt the Sportmonks ID so future syncs hit path 1
-                            if (existing != null)
-                                existing.ExternalId = fixture.Id;
-                        }
-
-                        if (existing != null)
-                        {
-                            existing.HomeTeamId = homeTeam.Id;
-                            existing.AwayTeamId = awayTeam.Id;
-                            existing.MatchDate   = matchDate;
-                            existing.Status      = status;
-                            if (homeScore.HasValue) existing.HomeScore = homeScore;
-                            if (awayScore.HasValue) existing.AwayScore = awayScore;
-                            updated++;
-                        }
-                        else
-                        {
-                            _db.Matches.Add(new Match
-                            {
-                                ExternalId = fixture.Id,
-                                HomeTeamId = homeTeam.Id,
-                                AwayTeamId = awayTeam.Id,
-                                MatchDate  = matchDate,
-                                Status     = status,
-                                HomeScore  = homeScore,
-                                AwayScore  = awayScore,
-                            });
-                            added++;
-                        }
+                        var (a, u) = await UpsertFixtureAsync(fixture, ct);
+                        added += a; updated += u;
                     }
                     catch (Exception ex)
                     {
@@ -125,6 +63,112 @@ namespace BPFL.API.Services.MatchServices
 
             _logger.LogInformation("Sportmonks {League} sync: added={Added} updated={Updated}", leagueCode, added, updated);
             return (added, updated);
+        }
+
+        /// <summary>
+        /// Import historical finished matches for a league going back <daysBack> days.
+        /// Uses the between/{start}/{end} endpoint — one request per page instead of one per day.
+        /// </summary>
+        public async Task<(int added, int updated)> SyncLeagueHistoryAsync(
+            string leagueCode, int daysBack = 365, CancellationToken ct = default)
+        {
+            if (!SportmonksClient.LeagueMap.TryGetValue(leagueCode.ToUpper(), out var leagueId))
+                throw new ArgumentException($"Unknown Sportmonks league code: {leagueCode}.");
+
+            var to   = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+            var from = to.AddDays(-daysBack);
+
+            _logger.LogInformation("Fetching history for {League} from {From} to {To}", leagueCode, from, to);
+
+            var fixtures = await _sportmonks.GetFixturesBetweenAsync(from, to, leagueId, ct);
+
+            _logger.LogInformation("Got {Count} historical fixtures for {League}", fixtures.Count, leagueCode);
+
+            int added = 0, updated = 0;
+
+            foreach (var fixture in fixtures)
+            {
+                if (ct.IsCancellationRequested) break;
+                try
+                {
+                    var (a, u) = await UpsertFixtureAsync(fixture, ct);
+                    added += a; updated += u;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to process historical fixture {Id}", fixture.Id);
+                }
+            }
+
+            if (added + updated > 0)
+                await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("History sync {League}: added={A} updated={U}", leagueCode, added, updated);
+            return (added, updated);
+        }
+
+        // ── Shared upsert logic ───────────────────────────────────────
+
+        private async Task<(int added, int updated)> UpsertFixtureAsync(SmFixture fixture, CancellationToken ct)
+        {
+            var home = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "home");
+            var away = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "away");
+            if (home == null || away == null) return (0, 0);
+
+            var homeTeam = await EnsureTeamAsync(home, ct);
+            var awayTeam = await EnsureTeamAsync(away, ct);
+
+            if (!DateTime.TryParse(fixture.StartingAt, out var matchDate)) return (0, 0);
+            matchDate = DateTime.SpecifyKind(matchDate, DateTimeKind.Utc);
+
+            var status = fixture.StateId == StateFinished ? "FINISHED" : "TIMED";
+
+            var homeScore = fixture.Scores
+                .FirstOrDefault(s => s.Description == "CURRENT" && s.Score?.Participant == "home")
+                ?.Score?.Goals;
+            var awayScore = fixture.Scores
+                .FirstOrDefault(s => s.Description == "CURRENT" && s.Score?.Participant == "away")
+                ?.Score?.Goals;
+
+            var existing = await _db.Matches
+                .FirstOrDefaultAsync(m => m.ExternalId == fixture.Id, ct);
+
+            if (existing == null)
+            {
+                var dayStart = matchDate.Date;
+                var dayEnd   = dayStart.AddDays(1);
+                existing = await _db.Matches.FirstOrDefaultAsync(m =>
+                    m.HomeTeamId == homeTeam.Id &&
+                    m.AwayTeamId == awayTeam.Id &&
+                    m.MatchDate  >= dayStart &&
+                    m.MatchDate  <  dayEnd, ct);
+
+                if (existing != null)
+                    existing.ExternalId = fixture.Id;
+            }
+
+            if (existing != null)
+            {
+                existing.HomeTeamId = homeTeam.Id;
+                existing.AwayTeamId = awayTeam.Id;
+                existing.MatchDate  = matchDate;
+                existing.Status     = status;
+                if (homeScore.HasValue) existing.HomeScore = homeScore;
+                if (awayScore.HasValue) existing.AwayScore = awayScore;
+                return (0, 1);
+            }
+
+            _db.Matches.Add(new Match
+            {
+                ExternalId = fixture.Id,
+                HomeTeamId = homeTeam.Id,
+                AwayTeamId = awayTeam.Id,
+                MatchDate  = matchDate,
+                Status     = status,
+                HomeScore  = homeScore,
+                AwayScore  = awayScore,
+            });
+            return (1, 0);
         }
 
         private async Task<Team> EnsureTeamAsync(SmParticipant participant, CancellationToken ct)
