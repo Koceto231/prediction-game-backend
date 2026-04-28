@@ -1,8 +1,10 @@
+using BPFL.API.Data;
 using BPFL.API.Services;
 using BPFL.API.Services.FantasyServices;
 using BPFL.API.Services.MatchServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Controllers
 {
@@ -11,54 +13,25 @@ namespace BPFL.API.Controllers
     [Route("api/admin/sync")]
     public class AdminSyncController : ControllerBase
     {
-        private readonly TeamSyncService _teams;
-        private readonly MatchSyncService _matches;
         private readonly PredictionScoringService _scoring;
         private readonly SportmonksMatchSyncService _sportmonks;
         private readonly FantasyAutoSyncService _fantasySync;
-        private readonly ApiSportsPlayerSeedService _playerSeed;
+        private readonly BPFL_DBContext _db;
 
         public AdminSyncController(
-            TeamSyncService teams,
-            MatchSyncService matches,
             PredictionScoringService scoring,
             SportmonksMatchSyncService sportmonks,
             FantasyAutoSyncService fantasySync,
-            ApiSportsPlayerSeedService playerSeed)
+            BPFL_DBContext db)
         {
-            _teams       = teams;
-            _matches     = matches;
             _scoring     = scoring;
             _sportmonks  = sportmonks;
             _fantasySync = fantasySync;
-            _playerSeed  = playerSeed;
+            _db          = db;
         }
 
-        // ── football-data.org ─────────────────────────────────────────
+        // ── Sportmonks — matches ──────────────────────────────────────
 
-        [HttpPost("teams")]
-        public async Task<IActionResult> ImportTeams([FromQuery] string competitionIdOrCode)
-        {
-            if (string.IsNullOrWhiteSpace(competitionIdOrCode))
-                return BadRequest("competitionIdOrCode is required");
-            return Ok(await _teams.ImportTeamAsync(competitionIdOrCode));
-        }
-
-        [HttpPost("matches")]
-        public async Task<IActionResult> ImportMatches([FromQuery] string competitionIdOrCode)
-        {
-            if (string.IsNullOrWhiteSpace(competitionIdOrCode))
-                return BadRequest("competitionIdOrCode is required");
-            return Ok(await _matches.ImportMatchesAsync(competitionIdOrCode));
-        }
-
-        // ── Sportmonks ────────────────────────────────────────────────
-
-        /// <summary>
-        /// Sync matches from Sportmonks for the given league code.
-        /// leagueCode: BGL (efbet Liga), PL, BL1, SA, PD
-        /// daysAhead: how many days forward to import (default 30)
-        /// </summary>
         [HttpPost("matches/sportmonks")]
         public async Task<IActionResult> ImportSportmonksMatches(
             [FromQuery] string leagueCode = "BGL",
@@ -76,22 +49,38 @@ namespace BPFL.API.Controllers
             }
         }
 
-        // ── Fantasy players ───────────────────────────────────────────
+        // ── Deduplicate matches ───────────────────────────────────────
 
         /// <summary>
-        /// Sync fantasy players from football-data.org squad data for all teams in DB.
+        /// Remove duplicate matches — keeps the one with the lower Id (oldest import)
+        /// and deletes any extra rows with the same HomeTeamId + AwayTeamId + same calendar day.
         /// </summary>
-        [HttpPost("sync-players")]
-        public async Task<IActionResult> SyncPlayers(CancellationToken ct = default)
+        [HttpPost("matches/dedup")]
+        public async Task<IActionResult> DedupMatches(CancellationToken ct = default)
         {
-            await _fantasySync.SyncPlayersFromSquadsAsync([], ct);
-            return Ok(new { message = "Squad sync triggered. Check logs for progress." });
+            var all = await _db.Matches.OrderBy(m => m.Id).ToListAsync(ct);
+
+            var seen  = new HashSet<string>();
+            var toDelete = new List<BPFL.API.Models.Match>();
+
+            foreach (var m in all)
+            {
+                var key = $"{m.HomeTeamId}_{m.AwayTeamId}_{m.MatchDate.Date:yyyy-MM-dd}";
+                if (!seen.Add(key))
+                    toDelete.Add(m);
+            }
+
+            if (toDelete.Count > 0)
+            {
+                _db.Matches.RemoveRange(toDelete);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return Ok(new { deleted = toDelete.Count, message = $"Removed {toDelete.Count} duplicate match(es)." });
         }
 
-        /// <summary>
-        /// Sync players from Sportmonks squads for all teams that have a Sportmonks ExternalId.
-        /// Works for BGL and any other league synced via Sportmonks.
-        /// </summary>
+        // ── Sportmonks — players ──────────────────────────────────────
+
         [HttpPost("sync-players/sportmonks")]
         public async Task<IActionResult> SyncPlayersSportmonks(CancellationToken ct = default)
         {

@@ -68,8 +68,25 @@ namespace BPFL.API.Services.MatchServices
                             .FirstOrDefault(s => s.Description == "CURRENT" && s.Score?.Participant == "away")
                             ?.Score?.Goals;
 
+                        // 1. Match by Sportmonks fixture ID
                         var existing = await _db.Matches
                             .FirstOrDefaultAsync(m => m.ExternalId == fixture.Id, ct);
+
+                        // 2. Fallback: same teams on the same calendar day (dedup football-data.org imports)
+                        if (existing == null)
+                        {
+                            var dayStart = matchDate.Date;
+                            var dayEnd   = dayStart.AddDays(1);
+                            existing = await _db.Matches.FirstOrDefaultAsync(m =>
+                                m.HomeTeamId == homeTeam.Id &&
+                                m.AwayTeamId == awayTeam.Id &&
+                                m.MatchDate  >= dayStart &&
+                                m.MatchDate  <  dayEnd, ct);
+
+                            // Adopt the Sportmonks ID so future syncs hit path 1
+                            if (existing != null)
+                                existing.ExternalId = fixture.Id;
+                        }
 
                         if (existing != null)
                         {
