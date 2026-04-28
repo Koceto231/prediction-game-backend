@@ -145,6 +145,103 @@ namespace BPFL.API.Services.FantasyServices
                 added, updated, callCount);
         }
 
+        // ── Player sync from Sportmonks squads (BGL + any league with ExternalId) ──
+
+        /// <summary>
+        /// Fetch squads from Sportmonks for all DB teams that have a Sportmonks ExternalId.
+        /// Safe to call repeatedly — upserts by ExternalPlayerId.
+        /// </summary>
+        public async Task SyncPlayersFromSportmonksAsync(CancellationToken ct = default)
+        {
+            var dbTeams = await _db.Teams.AsNoTracking()
+                .Where(t => t.ExternalId > 0)
+                .ToListAsync(ct);
+
+            if (dbTeams.Count == 0)
+            {
+                _logger.LogWarning("No teams with Sportmonks ExternalId — skipping player sync.");
+                return;
+            }
+
+            int added = 0, updated = 0;
+
+            foreach (var team in dbTeams)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                try
+                {
+                    var squad = await _sportmonks.GetSquadByTeamIdAsync(team.ExternalId, ct);
+                    if (squad.Count == 0)
+                    {
+                        _logger.LogWarning("Empty squad from Sportmonks for team {Name} (id={Id})", team.Name, team.ExternalId);
+                        continue;
+                    }
+
+                    foreach (var sp in squad)
+                    {
+                        if (sp.PlayerId <= 0) continue;
+
+                        var name = sp.Player?.CommonName
+                                ?? sp.Player?.DisplayName
+                                ?? sp.Player?.Name;
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+
+                        var pos = MapPositionById(sp.PositionId);
+
+                        var existing = await _db.FantasyPlayers
+                            .FirstOrDefaultAsync(p => p.ExternalPlayerId == sp.PlayerId, ct);
+
+                        if (existing != null)
+                        {
+                            existing.Name          = name;
+                            existing.Position      = pos;
+                            existing.TeamId        = team.Id;
+                            existing.IsActive      = true;
+                            existing.LastUpdatedAt = DateTime.UtcNow;
+                            updated++;
+                        }
+                        else
+                        {
+                            _db.FantasyPlayers.Add(new FantasyPlayer
+                            {
+                                ExternalPlayerId = sp.PlayerId,
+                                Name             = name,
+                                Position         = pos,
+                                TeamId           = team.Id,
+                                Price            = DefaultPrice(pos),
+                                IsActive         = true,
+                                CreatedAt        = DateTime.UtcNow,
+                                LastUpdatedAt    = DateTime.UtcNow,
+                            });
+                            added++;
+                        }
+                    }
+
+                    await _db.SaveChangesAsync(ct);
+                    _logger.LogInformation("Sportmonks squad sync — {Team}: +{A} added, {U} updated", team.Name, added, updated);
+
+                    await Task.Delay(300, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to sync Sportmonks squad for team {Name}", team.Name);
+                }
+            }
+
+            _logger.LogInformation("Sportmonks player sync done: added={A} updated={U}", added, updated);
+        }
+
+        // Sportmonks position_id → FantasyPosition
+        private static FantasyPlayer.FantasyPosition MapPositionById(int? posId) => posId switch
+        {
+            1 => FantasyPlayer.FantasyPosition.GK,
+            2 => FantasyPlayer.FantasyPosition.DEF,
+            3 => FantasyPlayer.FantasyPosition.MID,
+            4 => FantasyPlayer.FantasyPosition.FWD,
+            _ => FantasyPlayer.FantasyPosition.MID,
+        };
+
         // ── Gameweek auto-creation from matchdays ─────────────────────
 
         /// <summary>

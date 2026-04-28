@@ -78,6 +78,16 @@ namespace BPFL.API.Services.External
             return root?.Data?.Statistics ?? [];
         }
 
+        // ── Squad for a team ──────────────────────────────────────────
+
+        public async Task<List<SmSquadPlayer>> GetSquadByTeamIdAsync(
+            int teamId, CancellationToken ct = default)
+        {
+            var root = await GetAsync<SmRoot<SmSquadPlayer>>(
+                $"squads/teams/{teamId}?include=players", ct);
+            return root?.Data ?? [];
+        }
+
         // ── Generic GET ───────────────────────────────────────────────
 
         private async Task<T?> GetAsync<T>(string url, CancellationToken ct)
@@ -224,5 +234,31 @@ namespace BPFL.API.Services.External
     public class SmStatData
     {
         public int? Value { get; set; }
+    }
+
+    public class SmSquadPlayer
+    {
+        [JsonPropertyName("player_id")]
+        public int PlayerId { get; set; }
+
+        [JsonPropertyName("position_id")]
+        public int? PositionId { get; set; }
+
+        [JsonPropertyName("team_id")]
+        public int TeamId { get; set; }
+
+        public SmPlayerDetail? Player { get; set; }
+    }
+
+    public class SmPlayerDetail
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+
+        [JsonPropertyName("display_name")]
+        public string? DisplayName { get; set; }
+
+        [JsonPropertyName("common_name")]
+        public string? CommonName { get; set; }
     }
 }

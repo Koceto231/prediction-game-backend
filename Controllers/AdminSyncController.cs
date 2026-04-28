@@ -89,20 +89,14 @@ namespace BPFL.API.Controllers
         }
 
         /// <summary>
-        /// Seed players from api-sports for a specific league.
-        /// leagueCode: BGL (efbet Liga), PL, PD, SA, BL1, FL1, CL
-        /// season: e.g. 2025
+        /// Sync players from Sportmonks squads for all teams that have a Sportmonks ExternalId.
+        /// Works for BGL and any other league synced via Sportmonks.
         /// </summary>
-        [HttpPost("seed-players")]
-        public async Task<IActionResult> SeedPlayers(
-            [FromQuery] string leagueCode = "BGL",
-            [FromQuery] int season = 2024,
-            CancellationToken ct = default)
+        [HttpPost("sync-players/sportmonks")]
+        public async Task<IActionResult> SyncPlayersSportmonks(CancellationToken ct = default)
         {
-            var result = await _playerSeed.SeedLeagueAsync(leagueCode, season, ct);
-            if (!result.Success)
-                return BadRequest(new { message = result.Message });
-            return Ok(new { message = result.Message });
+            await _fantasySync.SyncPlayersFromSportmonksAsync(ct);
+            return Ok(new { message = "Sportmonks player sync triggered. Check logs for progress." });
         }
 
         // ── Scoring ───────────────────────────────────────────────────
