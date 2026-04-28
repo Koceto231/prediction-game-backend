@@ -44,16 +44,15 @@ namespace BPFL.API.Services.FantasyServices
 
         // ── Gameweek ──────────────────────────────────────────────────
 
-        public async Task<FantasyGameweekResponseDTO> GetCurrentFantasyGameweekAsync(CancellationToken ct = default)
+        public async Task<FantasyGameweekResponseDTO?> GetCurrentFantasyGameweekAsync(CancellationToken ct = default)
         {
             var gameweek = await _db.FantasyGameweeks
                 .AsNoTracking()
                 .Where(g => !g.IsCompleted)
                 .OrderBy(g => g.GameWeek)
-                .FirstOrDefaultAsync(ct)
-                ?? throw new KeyNotFoundException("No active fantasy gameweek found.");
+                .FirstOrDefaultAsync(ct);
 
-            return MapGameweek(gameweek);
+            return gameweek == null ? null : MapGameweek(gameweek);
         }
 
         public async Task<FantasyGameweekResponseDTO> CreateGameweekAsync(CreateFantasyGameweekDTO dto, CancellationToken ct = default)

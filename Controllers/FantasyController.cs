@@ -28,6 +28,8 @@ namespace BPFL.API.Controllers
         public async Task<IActionResult> GetCurrentGameweek(CancellationToken ct = default)
         {
             var result = await _fantasy.GetCurrentFantasyGameweekAsync(ct);
+            if (result == null)
+                return NotFound(new { message = "No active fantasy gameweek." });
             return Ok(result);
         }
 
