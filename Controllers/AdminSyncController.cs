@@ -5,6 +5,7 @@ using BPFL.API.Services.MatchServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BPFL.API.Controllers
 {
@@ -17,17 +18,20 @@ namespace BPFL.API.Controllers
         private readonly SportmonksMatchSyncService _sportmonks;
         private readonly FantasyAutoSyncService _fantasySync;
         private readonly BPFL_DBContext _db;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         public AdminSyncController(
             PredictionScoringService scoring,
             SportmonksMatchSyncService sportmonks,
             FantasyAutoSyncService fantasySync,
-            BPFL_DBContext db)
+            BPFL_DBContext db,
+            IServiceScopeFactory scopeFactory)
         {
-            _scoring     = scoring;
-            _sportmonks  = sportmonks;
-            _fantasySync = fantasySync;
-            _db          = db;
+            _scoring      = scoring;
+            _sportmonks   = sportmonks;
+            _fantasySync  = fantasySync;
+            _db           = db;
+            _scopeFactory = scopeFactory;
         }
 
         // ── Sportmonks — matches ──────────────────────────────────────
@@ -104,10 +108,16 @@ namespace BPFL.API.Controllers
         // ── Sportmonks — players ──────────────────────────────────────
 
         [HttpPost("sync-players/sportmonks")]
-        public async Task<IActionResult> SyncPlayersSportmonks(CancellationToken ct = default)
+        public IActionResult SyncPlayersSportmonks()
         {
-            await _fantasySync.SyncPlayersFromSportmonksAsync(ct);
-            return Ok(new { message = "Sportmonks player sync triggered. Check logs for progress." });
+            // Fire-and-forget — sync can take several minutes for many teams
+            _ = Task.Run(async () =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var svc = scope.ServiceProvider.GetRequiredService<FantasyAutoSyncService>();
+                await svc.SyncPlayersFromSportmonksAsync(CancellationToken.None);
+            });
+            return Ok(new { message = "Player sync started in background. Check Render logs for progress." });
         }
 
         // ── Scoring ───────────────────────────────────────────────────

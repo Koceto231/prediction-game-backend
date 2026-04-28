@@ -172,11 +172,25 @@ namespace BPFL.API.Services.FantasyServices
                 try
                 {
                     var squad = await _sportmonks.GetSquadByTeamIdAsync(team.ExternalId, ct);
+                    _logger.LogInformation("Team {Name} (smId={Id}): {Count} squad entries returned",
+                        team.Name, team.ExternalId, squad.Count);
+
                     if (squad.Count == 0)
                     {
                         _logger.LogWarning("Empty squad from Sportmonks for team {Name} (id={Id})", team.Name, team.ExternalId);
                         continue;
                     }
+
+                    // Log a sample to diagnose position fields
+                    var sample = squad.FirstOrDefault();
+                    if (sample != null)
+                        _logger.LogInformation(
+                            "Sample player — PlayerId={Pid} Name={Name} PosId={PosId} PlayerPosId={PPosId} PosName={PosName}",
+                            sample.PlayerId,
+                            sample.Player?.CommonName ?? sample.Player?.Name,
+                            sample.PositionId,
+                            sample.Player?.PositionId,
+                            sample.Player?.Position?.Name);
 
                     foreach (var sp in squad)
                     {

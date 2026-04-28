@@ -114,8 +114,17 @@ namespace BPFL.API.Services.External
         public async Task<List<SmSquadPlayer>> GetSquadByTeamIdAsync(
             int teamId, CancellationToken ct = default)
         {
+            // Try with position include first; fall back to player-only if it fails
             var root = await GetAsync<SmRoot<SmSquadPlayer>>(
                 $"squads/teams/{teamId}?include=player;player.position", ct);
+
+            if (root?.Data == null || root.Data.Count == 0)
+            {
+                _logger.LogInformation("Falling back to player-only include for team {Id}", teamId);
+                root = await GetAsync<SmRoot<SmSquadPlayer>>(
+                    $"squads/teams/{teamId}?include=player", ct);
+            }
+
             return root?.Data ?? [];
         }
 
