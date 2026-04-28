@@ -21,6 +21,7 @@ namespace BPFL.API.Services.FantasyServices
             ["BL1"] = 78,   // Bundesliga
             ["FL1"] = 61,   // Ligue 1
             ["CL"]  = 2,    // Champions League
+            ["BGL"] = 172,  // efbet Liga (Bulgaria First Professional League)
         };
 
         public ApiSportsPlayerSeedService(

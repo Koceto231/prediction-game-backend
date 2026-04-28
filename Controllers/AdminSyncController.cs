@@ -16,19 +16,22 @@ namespace BPFL.API.Controllers
         private readonly PredictionScoringService _scoring;
         private readonly SportmonksMatchSyncService _sportmonks;
         private readonly FantasyAutoSyncService _fantasySync;
+        private readonly ApiSportsPlayerSeedService _playerSeed;
 
         public AdminSyncController(
             TeamSyncService teams,
             MatchSyncService matches,
             PredictionScoringService scoring,
             SportmonksMatchSyncService sportmonks,
-            FantasyAutoSyncService fantasySync)
+            FantasyAutoSyncService fantasySync,
+            ApiSportsPlayerSeedService playerSeed)
         {
             _teams       = teams;
             _matches     = matches;
             _scoring     = scoring;
             _sportmonks  = sportmonks;
             _fantasySync = fantasySync;
+            _playerSeed  = playerSeed;
         }
 
         // ── football-data.org ─────────────────────────────────────────
@@ -83,6 +86,23 @@ namespace BPFL.API.Controllers
         {
             await _fantasySync.SyncPlayersFromSquadsAsync([], ct);
             return Ok(new { message = "Squad sync triggered. Check logs for progress." });
+        }
+
+        /// <summary>
+        /// Seed players from api-sports for a specific league.
+        /// leagueCode: BGL (efbet Liga), PL, PD, SA, BL1, FL1, CL
+        /// season: e.g. 2025
+        /// </summary>
+        [HttpPost("seed-players")]
+        public async Task<IActionResult> SeedPlayers(
+            [FromQuery] string leagueCode = "BGL",
+            [FromQuery] int season = 2024,
+            CancellationToken ct = default)
+        {
+            var result = await _playerSeed.SeedLeagueAsync(leagueCode, season, ct);
+            if (!result.Success)
+                return BadRequest(new { message = result.Message });
+            return Ok(new { message = result.Message });
         }
 
         // ── Scoring ───────────────────────────────────────────────────

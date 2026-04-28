@@ -141,7 +141,9 @@ builder.Services.AddScoped<LeagueService>();
 builder.Services.AddScoped<FantasyServices>();
 builder.Services.AddScoped<FantasyAutoSyncService>();
 builder.Services.AddScoped<SportmonksMatchSyncService>();
+builder.Services.AddScoped<ApiSportsPlayerSeedService>();
 builder.Services.AddHttpClient<SportmonksClient>();
+builder.Services.AddHttpClient<ApiSportsClient>();
 
 // ── Background jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MatchSyncJob>();
