@@ -247,34 +247,70 @@ namespace BPFL.API.Services.FantasyServices
         }
 
         // Map Sportmonks squad entry → FantasyPosition
-        // Priority: position name string → position_id → default MID
+        // Priority: position name string → position_id (all known Sportmonks ID sets)
         private static FantasyPlayer.FantasyPosition MapSportmonksPosition(BPFL.API.Services.External.SmSquadPlayer sp)
         {
-            // 1. Try position name from include=player.position
-            var name = sp.Player?.Position?.Name ?? sp.Player?.Position?.Code;
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                return name.ToLowerInvariant() switch
-                {
-                    var n when n.Contains("goalkeeper") || n.Contains("keeper") => FantasyPlayer.FantasyPosition.GK,
-                    var n when n.Contains("defender") || n.Contains("back") || n.Contains("centre-back") => FantasyPlayer.FantasyPosition.DEF,
-                    var n when n.Contains("midfielder") || n.Contains("midfield") => FantasyPlayer.FantasyPosition.MID,
-                    var n when n.Contains("attacker") || n.Contains("forward") || n.Contains("striker") || n.Contains("winger") => FantasyPlayer.FantasyPosition.FWD,
-                    _ => FantasyPlayer.FantasyPosition.MID
-                };
-            }
+            // 1. Try position name/code from include=player.position
+            var posName = sp.Player?.Position?.Name ?? sp.Player?.Position?.Code;
+            if (!string.IsNullOrWhiteSpace(posName))
+                return MapByPositionName(posName);
 
-            // 2. Try position_id (1=GK, 2=DEF, 3=MID, 4=ATT in Sportmonks general positions)
+            // 2. Try position_id — cover all known Sportmonks ID sets
             var posId = sp.Player?.PositionId ?? sp.PositionId;
-            return posId switch
-            {
-                1 => FantasyPlayer.FantasyPosition.GK,
-                2 => FantasyPlayer.FantasyPosition.DEF,
-                3 => FantasyPlayer.FantasyPosition.MID,
-                4 => FantasyPlayer.FantasyPosition.FWD,
-                _ => FantasyPlayer.FantasyPosition.MID
-            };
+            return MapByPositionId(posId);
         }
+
+        private static FantasyPlayer.FantasyPosition MapByPositionName(string name)
+        {
+            var n = name.ToLowerInvariant();
+            if (n.Contains("goalkeeper") || n.Contains("keeper") || n == "gk")
+                return FantasyPlayer.FantasyPosition.GK;
+            if (n.Contains("defender") || n.Contains("back") || n.Contains("centre-back") || n == "def")
+                return FantasyPlayer.FantasyPosition.DEF;
+            if (n.Contains("attacker") || n.Contains("forward") || n.Contains("striker") || n.Contains("winger") || n == "fwd")
+                return FantasyPlayer.FantasyPosition.FWD;
+            // midfield is default
+            return FantasyPlayer.FantasyPosition.MID;
+        }
+
+        private static FantasyPlayer.FantasyPosition MapByPositionId(int? id) => id switch
+        {
+            // Sportmonks v3 general position IDs
+            1  => FantasyPlayer.FantasyPosition.GK,
+            2  => FantasyPlayer.FantasyPosition.DEF,
+            3  => FantasyPlayer.FantasyPosition.MID,
+            4  => FantasyPlayer.FantasyPosition.FWD,
+
+            // Sportmonks v3 detailed position type IDs
+            24 => FantasyPlayer.FantasyPosition.GK,   // Goalkeeper
+            25 => FantasyPlayer.FantasyPosition.DEF,  // Centre Back
+            26 => FantasyPlayer.FantasyPosition.MID,  // Defensive Midfielder
+            27 => FantasyPlayer.FantasyPosition.MID,  // Central Midfielder
+            28 => FantasyPlayer.FantasyPosition.MID,  // Attacking Midfielder
+            29 => FantasyPlayer.FantasyPosition.MID,  // Right Midfielder
+            30 => FantasyPlayer.FantasyPosition.MID,  // Left Midfielder
+            31 => FantasyPlayer.FantasyPosition.FWD,  // Right Winger
+            32 => FantasyPlayer.FantasyPosition.FWD,  // Left Winger
+            33 => FantasyPlayer.FantasyPosition.FWD,  // Centre Forward
+            34 => FantasyPlayer.FantasyPosition.FWD,  // Second Striker
+            35 => FantasyPlayer.FantasyPosition.DEF,  // Left Back
+            36 => FantasyPlayer.FantasyPosition.DEF,  // Right Back
+
+            // Alternative Sportmonks ID set (type-based)
+            148 => FantasyPlayer.FantasyPosition.GK,
+            154 => FantasyPlayer.FantasyPosition.DEF,
+            155 => FantasyPlayer.FantasyPosition.DEF,
+            156 => FantasyPlayer.FantasyPosition.DEF,
+            157 => FantasyPlayer.FantasyPosition.MID,
+            158 => FantasyPlayer.FantasyPosition.MID,
+            159 => FantasyPlayer.FantasyPosition.MID,
+            160 => FantasyPlayer.FantasyPosition.FWD,
+            161 => FantasyPlayer.FantasyPosition.FWD,
+            162 => FantasyPlayer.FantasyPosition.FWD,
+            163 => FantasyPlayer.FantasyPosition.FWD,
+
+            _ => FantasyPlayer.FantasyPosition.MID
+        };
 
         // ── Gameweek auto-creation from matchdays ─────────────────────
 
