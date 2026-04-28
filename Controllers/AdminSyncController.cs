@@ -120,6 +120,28 @@ namespace BPFL.API.Controllers
             return Ok(new { message = "Player sync started in background. Check Render logs for progress." });
         }
 
+        // ── Debug ────────────────────────────────────────────────────
+
+        /// <summary>Returns raw Sportmonks squad for a team so we can inspect position fields.</summary>
+        [HttpGet("debug/squad/{sportmonksTeamId:int}")]
+        public async Task<IActionResult> DebugSquad(int sportmonksTeamId, CancellationToken ct = default)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var sm = scope.ServiceProvider.GetRequiredService<BPFL.API.Services.External.SportmonksClient>();
+            var squad = await sm.GetSquadByTeamIdAsync(sportmonksTeamId, ct);
+            var preview = squad.Take(5).Select(sp => new
+            {
+                sp.PlayerId,
+                sp.PositionId,
+                PlayerName       = sp.Player?.Name,
+                PlayerCommonName = sp.Player?.CommonName,
+                PlayerPosId      = sp.Player?.PositionId,
+                PosName          = sp.Player?.Position?.Name,
+                PosCode          = sp.Player?.Position?.Code,
+            });
+            return Ok(new { total = squad.Count, sample = preview });
+        }
+
         // ── Scoring ───────────────────────────────────────────────────
 
         [HttpPost("score/predictions/{matchId}")]
