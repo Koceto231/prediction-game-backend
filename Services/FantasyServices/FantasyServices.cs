@@ -99,6 +99,7 @@ namespace BPFL.API.Services.FantasyServices
                 TeamId   = p.TeamId,
                 TeamName = p.Team?.Name ?? "",
                 Price    = p.Price,
+                PhotoUrl = p.PhotoUrl,
             }).ToList();
         }
 

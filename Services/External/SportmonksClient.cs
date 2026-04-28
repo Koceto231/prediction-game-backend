@@ -321,6 +321,9 @@ namespace BPFL.API.Services.External
         [JsonPropertyName("position_id")]
         public int? PositionId { get; set; }
 
+        [JsonPropertyName("image_path")]
+        public string? ImagePath { get; set; }
+
         // Populated when include=player.position
         public SmPositionType? Position { get; set; }
     }

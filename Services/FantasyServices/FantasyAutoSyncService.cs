@@ -206,6 +206,8 @@ namespace BPFL.API.Services.FantasyServices
                         var existing = await _db.FantasyPlayers
                             .FirstOrDefaultAsync(p => p.ExternalPlayerId == sp.PlayerId, ct);
 
+                        var photoUrl = sp.Player?.ImagePath;
+
                         if (existing != null)
                         {
                             existing.Name          = name;
@@ -213,6 +215,8 @@ namespace BPFL.API.Services.FantasyServices
                             existing.TeamId        = team.Id;
                             existing.IsActive      = true;
                             existing.LastUpdatedAt = DateTime.UtcNow;
+                            if (!string.IsNullOrWhiteSpace(photoUrl))
+                                existing.PhotoUrl  = photoUrl;
                             updated++;
                         }
                         else
@@ -225,6 +229,7 @@ namespace BPFL.API.Services.FantasyServices
                                 TeamId           = team.Id,
                                 Price            = DefaultPrice(pos),
                                 IsActive         = true,
+                                PhotoUrl         = photoUrl,
                                 CreatedAt        = DateTime.UtcNow,
                                 LastUpdatedAt    = DateTime.UtcNow,
                             });
