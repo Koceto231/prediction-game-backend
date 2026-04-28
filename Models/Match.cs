@@ -33,6 +33,10 @@ namespace BPFL.API.Models
         public double? ExpectedHomeGoals { get; set; }
         public double? ExpectedAwayGoals { get; set; }
 
+        // Populated by Sportmonks stats sync — used to resolve Corners / YellowCards bets
+        public int? TotalCorners { get; set; }
+        public int? TotalYellowCards { get; set; }
+
         public List<Prediction?> Predictions { get; set; } = new List<Prediction?>();
         public List<Bet> Bets { get; set; } = new List<Bet>();
 

@@ -251,6 +251,7 @@ namespace BPFL.API.Services.FantasyServices
                 .ToDictionary(g => g.Key, g => g.First());
 
             var playerStats = new Dictionary<int, (int goals, int assists, int yellows, int reds)>();
+            int totalYellowCards = 0;
 
             foreach (var ev in smEvents)
             {
@@ -274,6 +275,7 @@ namespace BPFL.API.Services.FantasyServices
                 }
                 else if (ev.TypeId == SportmonksClient.EventType.YellowCard && ev.PlayerName != null)
                 {
+                    totalYellowCards++;
                     var player = FindPlayer(playerByName, ev.PlayerName);
                     if (player != null)
                     {
@@ -290,6 +292,28 @@ namespace BPFL.API.Services.FantasyServices
                         playerStats[player.Id] = (cur.goals, cur.assists, cur.yellows, cur.reds + 1);
                     }
                 }
+            }
+
+            // ── Fetch corner statistics from Sportmonks ───────────────────
+            int? totalCorners = null;
+            try
+            {
+                var smStats = await _sportmonks.GetFixtureStatisticsAsync(smFixture.Id, ct);
+                totalCorners = smStats
+                    .Where(s => s.TypeId == SportmonksClient.StatCorners)
+                    .Sum(s => s.Data?.Value ?? 0);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not fetch corner statistics for fixture {SmId}", smFixture.Id);
+            }
+
+            // Persist match-level stats for Corners / YellowCards bet resolution
+            var matchToUpdate = await _db.Matches.FindAsync([internalMatchId], ct);
+            if (matchToUpdate != null)
+            {
+                matchToUpdate.TotalCorners     = totalCorners;
+                matchToUpdate.TotalYellowCards = totalYellowCards > 0 ? totalYellowCards : null;
             }
 
             int recorded = 0;
@@ -316,7 +340,9 @@ namespace BPFL.API.Services.FantasyServices
             }
 
             await _db.SaveChangesAsync(ct);
-            _logger.LogInformation("Recorded Sportmonks stats for match {Id}: {Count} players", internalMatchId, recorded);
+            _logger.LogInformation(
+                "Recorded Sportmonks stats for match {Id}: {Count} players, corners={Corners}, yellows={Yellows}",
+                internalMatchId, recorded, totalCorners, totalYellowCards);
         }
 
         private static string NormaliseName(string name) =>

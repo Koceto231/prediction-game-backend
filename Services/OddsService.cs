@@ -1,6 +1,7 @@
 using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Models.DTO;
+using BPFL.API.Models.FantasyModel;
 using Microsoft.EntityFrameworkCore;
 using static BPFL.API.Models.Predictionenums;
 
@@ -14,7 +15,11 @@ namespace BPFL.API.Services
         private readonly ILogger<OddsService> _logger;
 
         private const double HouseEdge = 0.90;
-        private const decimal MinOdds = 1.05m;
+        private const decimal MinOdds  = 1.05m;
+
+        // Expected stats per match (used when we have no historic data)
+        private const double AvgCorners     = 10.0;
+        private const double AvgYellowCards = 3.8;
 
         public OddsService(
             BPFL_DBContext db,
@@ -30,8 +35,6 @@ namespace BPFL.API.Services
 
         public async Task EnsureOddsForUpcomingMatchesAsync(CancellationToken ct = default)
         {
-            // Also recalculate matches that already have winner odds but are missing
-            // ExpectedHomeGoals / AwayGoals (they were computed before that column was added)
             var matches = await _db.Matches
                 .Where(m => m.Status != "FINISHED"
                          && m.MatchDate >= DateTime.UtcNow
@@ -64,16 +67,20 @@ namespace BPFL.API.Services
             await _db.SaveChangesAsync(ct);
         }
 
+        /// <summary>Returns odds + description for any supported bet type on a given match.</summary>
         public async Task<BetOddsDTO?> GetDynamicOddsAsync(
             int matchId,
             BetType betType,
-            MatchWinner? winnerPick = null,
-            int? scoreHome = null,
-            int? scoreAway = null,
-            bool? bttsPick = null,
-            OverUnderLine? ouLine = null,
-            OverUnderPick? ouPick = null,
-            CancellationToken ct = default)
+            MatchWinner?      winnerPick    = null,
+            int?              scoreHome     = null,
+            int?              scoreAway     = null,
+            bool?             bttsPick      = null,
+            OverUnderLine?    ouLine        = null,
+            OverUnderPick?    ouPick        = null,
+            int?              goalscorerId  = null,
+            decimal?          lineValue     = null,
+            DoubleChancePick? dcPick        = null,
+            CancellationToken ct            = default)
         {
             var match = await _db.Matches.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == matchId, ct);
@@ -81,46 +88,222 @@ namespace BPFL.API.Services
             if (match?.ExpectedHomeGoals == null || match.ExpectedAwayGoals == null)
                 return null;
 
-            double lambdaH = match.ExpectedHomeGoals.Value;
-            double lambdaA = match.ExpectedAwayGoals.Value;
+            double lH = match.ExpectedHomeGoals.Value;
+            double lA = match.ExpectedAwayGoals.Value;
 
-            return betType switch
+            switch (betType)
             {
-                BetType.Winner => winnerPick == null ? null : new BetOddsDTO
-                {
-                    Odds = winnerPick switch
+                // ── 1 / X / 2 ──────────────────────────────────────────────
+                case BetType.Winner when winnerPick != null:
+                    return new BetOddsDTO
                     {
-                        MatchWinner.Home => match.HomeOdds ?? ToOdds(WinnerProb(lambdaH, lambdaA, MatchWinner.Home)),
-                        MatchWinner.Draw => match.DrawOdds ?? ToOdds(WinnerProb(lambdaH, lambdaA, MatchWinner.Draw)),
-                        MatchWinner.Away => match.AwayOdds ?? ToOdds(WinnerProb(lambdaH, lambdaA, MatchWinner.Away)),
-                        _ => MinOdds
-                    },
-                    Description = winnerPick.ToString()!
-                },
+                        Odds = winnerPick switch
+                        {
+                            MatchWinner.Home => match.HomeOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Home)),
+                            MatchWinner.Draw => match.DrawOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Draw)),
+                            MatchWinner.Away => match.AwayOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Away)),
+                            _ => MinOdds
+                        },
+                        Description = winnerPick.ToString()!
+                    };
 
-                BetType.ExactScore when scoreHome != null && scoreAway != null => new BetOddsDTO
+                // ── Exact Score ─────────────────────────────────────────────
+                case BetType.ExactScore when scoreHome != null && scoreAway != null:
+                    return new BetOddsDTO
+                    {
+                        Odds = ExactScoreOdds(lH, lA, scoreHome.Value, scoreAway.Value),
+                        Description = $"{scoreHome}-{scoreAway}"
+                    };
+
+                // ── BTTS ────────────────────────────────────────────────────
+                case BetType.BTTS when bttsPick != null:
+                    return new BetOddsDTO
+                    {
+                        Odds = BTTSOdds(lH, lA, bttsPick.Value),
+                        Description = bttsPick.Value ? "BTTS Yes" : "BTTS No"
+                    };
+
+                // ── Over / Under Goals ──────────────────────────────────────
+                case BetType.OverUnder when ouLine != null && ouPick != null:
+                    return new BetOddsDTO
+                    {
+                        Odds = OUOdds(lH, lA, ouLine.Value, ouPick.Value),
+                        Description = $"{ouPick} {OULineValue(ouLine.Value)}"
+                    };
+
+                // ── Goalscorer ──────────────────────────────────────────────
+                case BetType.Goalscorer when goalscorerId != null:
+                    return await GoalscorerOddsAsync(match, lH, lA, goalscorerId.Value, ct);
+
+                // ── Corners O/U ─────────────────────────────────────────────
+                case BetType.Corners when lineValue != null && ouPick != null:
                 {
-                    Odds = ExactScoreOdds(lambdaH, lambdaA, scoreHome.Value, scoreAway.Value),
-                    Description = $"{scoreHome}-{scoreAway}"
-                },
+                    double thr = (double)lineValue.Value;
+                    double p   = PoissonCdfOver(AvgCorners, thr);
+                    double prob = ouPick == OverUnderPick.Over ? p : 1 - p;
+                    return new BetOddsDTO
+                    {
+                        Odds        = ToOdds(prob),
+                        Description = $"Corners {ouPick} {lineValue}"
+                    };
+                }
 
-                BetType.BTTS when bttsPick != null => new BetOddsDTO
+                // ── Yellow Cards O/U ────────────────────────────────────────
+                case BetType.YellowCards when lineValue != null && ouPick != null:
                 {
-                    Odds = BTTSOdds(lambdaH, lambdaA, bttsPick.Value),
-                    Description = bttsPick.Value ? "BTTS Yes" : "BTTS No"
-                },
+                    double thr  = (double)lineValue.Value;
+                    double p    = PoissonCdfOver(AvgYellowCards, thr);
+                    double prob = ouPick == OverUnderPick.Over ? p : 1 - p;
+                    return new BetOddsDTO
+                    {
+                        Odds        = ToOdds(prob),
+                        Description = $"Yellow Cards {ouPick} {lineValue}"
+                    };
+                }
 
-                BetType.OverUnder when ouLine != null && ouPick != null => new BetOddsDTO
+                // ── Double Chance ───────────────────────────────────────────
+                case BetType.DoubleChance when dcPick != null:
                 {
-                    Odds = OUOdds(lambdaH, lambdaA, ouLine.Value, ouPick.Value),
-                    Description = $"{ouPick} {OULineValue(ouLine.Value)}"
-                },
+                    double home = WinnerProb(lH, lA, MatchWinner.Home);
+                    double draw = WinnerProb(lH, lA, MatchWinner.Draw);
+                    double away = WinnerProb(lH, lA, MatchWinner.Away);
+                    double prob = dcPick switch
+                    {
+                        DoubleChancePick.HomeOrDraw => home + draw,
+                        DoubleChancePick.HomeOrAway => home + away,
+                        DoubleChancePick.DrawOrAway => draw + away,
+                        _                           => 0
+                    };
+                    string label = dcPick switch
+                    {
+                        DoubleChancePick.HomeOrDraw => "1X",
+                        DoubleChancePick.HomeOrAway => "12",
+                        DoubleChancePick.DrawOrAway => "X2",
+                        _                           => ""
+                    };
+                    return new BetOddsDTO { Odds = ToOdds(prob), Description = $"Double Chance {label}" };
+                }
 
-                _ => null
+                default:
+                    return null;
+            }
+        }
+
+        // ── Goalscorer odds ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns a list of all players for both teams in a match with their goalscorer odds.
+        /// Used by GET /api/Match/{matchId}/players.
+        /// </summary>
+        public async Task<List<MatchPlayerDTO>> GetMatchPlayersWithOddsAsync(
+            int matchId, CancellationToken ct = default)
+        {
+            var match = await _db.Matches.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == matchId, ct);
+
+            if (match?.ExpectedHomeGoals == null || match.ExpectedAwayGoals == null)
+                return [];
+
+            double lH = match.ExpectedHomeGoals.Value;
+            double lA = match.ExpectedAwayGoals.Value;
+
+            var homePlayers = await _db.FantasyPlayers.AsNoTracking()
+                .Include(p => p.Team)
+                .Where(p => p.TeamId == match.HomeTeamId && p.IsActive)
+                .ToListAsync(ct);
+
+            var awayPlayers = await _db.FantasyPlayers.AsNoTracking()
+                .Include(p => p.Team)
+                .Where(p => p.TeamId == match.AwayTeamId && p.IsActive)
+                .ToListAsync(ct);
+
+            var result = new List<MatchPlayerDTO>();
+
+            foreach (var (players, lambda, isHome) in new[]
+            {
+                (homePlayers, lH, true),
+                (awayPlayers, lA, false)
+            })
+            {
+                var byPos = players.GroupBy(p => p.Position).ToDictionary(g => g.Key, g => g.Count());
+
+                foreach (var p in players)
+                {
+                    int count = byPos.GetValueOrDefault(p.Position, 1);
+                    decimal odds = GoalscorerPlayerOdds(lambda, p.Position, count);
+                    result.Add(new MatchPlayerDTO
+                    {
+                        PlayerId = p.Id,
+                        Name     = p.Name,
+                        Position = p.Position.ToString(),
+                        TeamName = p.Team.Name,
+                        IsHome   = isHome,
+                        Odds     = odds
+                    });
+                }
+            }
+
+            return [.. result.OrderBy(p => p.IsHome ? 0 : 1)
+                              .ThenBy(p => PosOrder(p.Position))
+                              .ThenBy(p => p.Name)];
+        }
+
+        private async Task<BetOddsDTO?> GoalscorerOddsAsync(
+            Match match, double lH, double lA, int goalscorerId, CancellationToken ct)
+        {
+            var player = await _db.FantasyPlayers.AsNoTracking()
+                .Include(p => p.Team)
+                .FirstOrDefaultAsync(p => p.Id == goalscorerId, ct);
+
+            if (player == null) return null;
+
+            bool isHome  = player.TeamId == match.HomeTeamId;
+            double lambda = isHome ? lH : lA;
+
+            int countSamePos = await _db.FantasyPlayers.AsNoTracking()
+                .CountAsync(p => p.TeamId == player.TeamId && p.Position == player.Position && p.IsActive, ct);
+            if (countSamePos == 0) countSamePos = 1;
+
+            decimal odds = GoalscorerPlayerOdds(lambda, player.Position, countSamePos);
+            return new BetOddsDTO
+            {
+                Odds        = odds,
+                Description = $"{player.Name} to score"
             };
         }
 
-        // ── Poisson helpers ──────────────────────────────────────
+        private static decimal GoalscorerPlayerOdds(double teamLambda,
+            FantasyPlayer.FantasyPosition pos, int countInPos)
+        {
+            double share = pos switch
+            {
+                FantasyPlayer.FantasyPosition.FWD => 0.50,
+                FantasyPlayer.FantasyPosition.MID => 0.28,
+                FantasyPlayer.FantasyPosition.DEF => 0.10,
+                FantasyPlayer.FantasyPosition.GK  => 0.02,
+                _                                 => 0.15
+            };
+            double lambdaPlayer = teamLambda * share / countInPos;
+            double pScores      = 1 - Math.Exp(-lambdaPlayer);  // P(≥1 goal)
+            return ToOdds(pScores);
+        }
+
+        private static int PosOrder(string pos) => pos switch
+        {
+            "GK"  => 0, "DEF" => 1, "MID" => 2, "FWD" => 3, _ => 9
+        };
+
+        // ── Poisson helpers ───────────────────────────────────────────────
+
+        /// <summary>P(X > threshold) where X ~ Poisson(lambda) and threshold is a half-integer line.</summary>
+        private static double PoissonCdfOver(double lambda, double threshold)
+        {
+            int floor = (int)Math.Floor(threshold);   // e.g. 9.5 → 9
+            double pUnder = 0;
+            for (int k = 0; k <= floor; k++)
+                pUnder += Poisson(lambda, k);
+            return 1 - pUnder;                        // P(X ≥ floor+1) = P(X > threshold)
+        }
 
         private decimal ExactScoreOdds(double lH, double lA, int h, int a)
         {
@@ -138,7 +321,7 @@ namespace BPFL.API.Services
         {
             double threshold = OULineValue(line);
             double pUnder = 0;
-            int maxGoals = (int)threshold + 1; // sum up to threshold (inclusive for under)
+            int maxGoals = (int)threshold + 1;
             for (int h = 0; h <= maxGoals; h++)
                 for (int a = 0; a <= maxGoals; a++)
                     if (h + a <= (int)threshold) pUnder += Poisson(lH, h) * Poisson(lA, a);
@@ -154,9 +337,9 @@ namespace BPFL.API.Services
                 for (int a = 0; a <= 8; a++)
                 {
                     double p = Poisson(lH, h) * Poisson(lA, a);
-                    if (h > a) home += p;
+                    if (h > a)      home += p;
                     else if (h == a) draw += p;
-                    else away += p;
+                    else             away += p;
                 }
             return winner switch { MatchWinner.Home => home, MatchWinner.Draw => draw, _ => away };
         }
@@ -166,7 +349,7 @@ namespace BPFL.API.Services
             OverUnderLine.Line15 => 1.5,
             OverUnderLine.Line25 => 2.5,
             OverUnderLine.Line35 => 3.5,
-            _ => 2.5
+            _                    => 2.5
         };
 
         private static double Poisson(double lambda, int k)

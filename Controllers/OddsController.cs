@@ -22,16 +22,28 @@ namespace BPFL.API.Controllers
         public async Task<IActionResult> GetOdds(
             int matchId,
             [FromQuery] BetType betType,
-            [FromQuery] MatchWinner? pick = null,
-            [FromQuery] int? scoreHome = null,
-            [FromQuery] int? scoreAway = null,
-            [FromQuery] bool? btts = null,
-            [FromQuery] OverUnderLine? ouLine = null,
-            [FromQuery] OverUnderPick? ouPick = null,
+            // 1X2
+            [FromQuery] MatchWinner? pick         = null,
+            // Exact score
+            [FromQuery] int? scoreHome            = null,
+            [FromQuery] int? scoreAway            = null,
+            // BTTS
+            [FromQuery] bool? btts                = null,
+            // O/U goals
+            [FromQuery] OverUnderLine? ouLine     = null,
+            [FromQuery] OverUnderPick? ouPick     = null,
+            // Goalscorer
+            [FromQuery] int? goalscorerId         = null,
+            // Corners / Yellow Cards — numeric line (e.g. 9.5) + ouPick
+            [FromQuery] decimal? lineValue        = null,
+            // Double Chance
+            [FromQuery] DoubleChancePick? dcPick  = null,
             CancellationToken ct = default)
         {
             var result = await _oddsService.GetDynamicOddsAsync(
-                matchId, betType, pick, scoreHome, scoreAway, btts, ouLine, ouPick, ct);
+                matchId, betType,
+                pick, scoreHome, scoreAway, btts, ouLine, ouPick,
+                goalscorerId, lineValue, dcPick, ct);
 
             if (result == null)
                 return NotFound(new { message = "Odds not available for this match or bet type." });

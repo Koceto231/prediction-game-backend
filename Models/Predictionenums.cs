@@ -21,5 +21,13 @@
             Over = 1,
             Under = 2
         }
+
+        // Double Chance: 1X = home or draw, HomeOrAway = either team wins (no draw), X2 = draw or away
+        public enum DoubleChancePick
+        {
+            HomeOrDraw = 1,
+            HomeOrAway = 2,
+            DrawOrAway = 3
+        }
     }
 }

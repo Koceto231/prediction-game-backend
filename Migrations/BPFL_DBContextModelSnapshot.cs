@@ -45,6 +45,15 @@ namespace BPFL.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DCPick")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("GoalscorerId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("LineValue")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("MatchId")
                         .HasColumnType("integer");
 
@@ -407,6 +416,12 @@ namespace BPFL.API.Migrations
 
                     b.Property<double?>("ExpectedHomeGoals")
                         .HasColumnType("double precision");
+
+                    b.Property<int?>("TotalCorners")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("TotalYellowCards")
+                        .HasColumnType("integer");
 
                     b.Property<int>("ExternalId")
                         .HasColumnType("integer");
