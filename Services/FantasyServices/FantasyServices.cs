@@ -81,22 +81,25 @@ namespace BPFL.API.Services.FantasyServices
 
         public async Task<List<FantasyPlayerResponseDTO>> GetFantasyPlayersAsync(CancellationToken ct = default)
         {
-            return await _db.FantasyPlayers
+            // Fetch from DB first, then map in memory to avoid EF/Npgsql
+            // failing to translate enum.ToString() to SQL
+            var players = await _db.FantasyPlayers
                 .AsNoTracking()
                 .Where(p => p.IsActive)
                 .Include(p => p.Team)
-                .Select(p => new FantasyPlayerResponseDTO
-                {
-                    Id       = p.Id,
-                    Name     = p.Name,
-                    Position = p.Position.ToString(),
-                    TeamId   = p.TeamId,
-                    TeamName = p.Team.Name,
-                    Price    = p.Price,
-                })
                 .OrderBy(p => p.Position)
                 .ThenBy(p => p.Price)
                 .ToListAsync(ct);
+
+            return players.Select(p => new FantasyPlayerResponseDTO
+            {
+                Id       = p.Id,
+                Name     = p.Name,
+                Position = p.Position.ToString(),
+                TeamId   = p.TeamId,
+                TeamName = p.Team?.Name ?? "",
+                Price    = p.Price,
+            }).ToList();
         }
 
         public async Task<FantasyPlayerResponseDTO> AddPlayerAsync(AddFantasyPlayerDTO dto, CancellationToken ct = default)
