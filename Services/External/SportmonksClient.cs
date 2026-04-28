@@ -260,5 +260,9 @@ namespace BPFL.API.Services.External
 
         [JsonPropertyName("common_name")]
         public string? CommonName { get; set; }
+
+        // General position: 1=GK, 2=DEF, 3=MID, 4=ATT
+        [JsonPropertyName("position_id")]
+        public int? PositionId { get; set; }
     }
 }

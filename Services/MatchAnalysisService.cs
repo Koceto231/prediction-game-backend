@@ -118,25 +118,28 @@ namespace BPFL.API.Services
             return points;
         }
 
+        // League-average fallback — used when a team has no finished matches yet
+        private const double LeagueAvgGoalsScored   = 1.35;
+        private const double LeagueAvgGoalsConceded = 1.35;
+
         public double CalculateAverageGoalsScored(List<Match> matches, int teamId)
         {
-            
-            if (matches == null || matches.Count == 0) return 0;
+            if (matches == null || matches.Count == 0) return LeagueAvgGoalsScored;
 
             double goals = matches.Sum(match =>
-                match.HomeTeamId == teamId ? (double)match.HomeScore :
-                match.AwayTeamId == teamId ? (double)match.AwayScore : 0);
+                match.HomeTeamId == teamId ? (double)(match.HomeScore ?? 0) :
+                match.AwayTeamId == teamId ? (double)(match.AwayScore ?? 0) : 0);
 
             return Math.Round(goals / matches.Count, 2);
         }
 
         public double CalculateAverageGoalsConceded(List<Match> matches, int teamId)
         {
-            if (matches == null || matches.Count == 0) return 0;
+            if (matches == null || matches.Count == 0) return LeagueAvgGoalsConceded;
 
             double goals = matches.Sum(match =>
-                match.HomeTeamId == teamId ? (double)match.AwayScore :
-                match.AwayTeamId == teamId ? (double)match.HomeScore : 0);
+                match.HomeTeamId == teamId ? (double)(match.AwayScore ?? 0) :
+                match.AwayTeamId == teamId ? (double)(match.HomeScore ?? 0) : 0);
 
             return Math.Round(goals / matches.Count, 2);
         }

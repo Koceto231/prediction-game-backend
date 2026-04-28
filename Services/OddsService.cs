@@ -38,7 +38,10 @@ namespace BPFL.API.Services
             var matches = await _db.Matches
                 .Where(m => m.Status != "FINISHED"
                          && m.MatchDate >= DateTime.UtcNow
-                         && (m.HomeOdds == null || m.ExpectedHomeGoals == null))
+                         && (m.HomeOdds == null
+                             || m.ExpectedHomeGoals == null
+                             || m.ExpectedHomeGoals < 0.7   // recalc if old bad value
+                             || m.ExpectedAwayGoals < 0.5))
                 .Include(m => m.HomeTeam)
                 .Include(m => m.AwayTeam)
                 .ToListAsync(ct);

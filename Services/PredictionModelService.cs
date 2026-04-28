@@ -48,8 +48,8 @@ namespace BPFL.API.Services
                 (homeDefenseWeakness * 0.30) +
                 (awayFormFactor * 0.35);
 
-            expectedHomeGoals = Math.Clamp(expectedHomeGoals, 0.2, 4.5);
-            expectedAwayGoals = Math.Clamp(expectedAwayGoals, 0.2, 4.5);
+            expectedHomeGoals = Math.Clamp(expectedHomeGoals, 0.7, 4.5);
+            expectedAwayGoals = Math.Clamp(expectedAwayGoals, 0.5, 4.5);
 
             double goalDifference = expectedHomeGoals - expectedAwayGoals;
 

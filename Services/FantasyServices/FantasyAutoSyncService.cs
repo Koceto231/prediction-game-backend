@@ -187,7 +187,9 @@ namespace BPFL.API.Services.FantasyServices
                                 ?? sp.Player?.Name;
                         if (string.IsNullOrWhiteSpace(name)) continue;
 
-                        var pos = MapPositionById(sp.PositionId);
+                        // position_id lives on the player object in Sportmonks v3
+                        var posId = sp.Player?.PositionId ?? sp.PositionId;
+                        var pos = MapPositionById(posId);
 
                         var existing = await _db.FantasyPlayers
                             .FirstOrDefaultAsync(p => p.ExternalPlayerId == sp.PlayerId, ct);
