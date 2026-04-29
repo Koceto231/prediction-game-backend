@@ -16,5 +16,7 @@ namespace BPFL.API.Models
 
         public int? YearOfCreate { get; set; }
 
+        /// <summary>Sportmonks league code this team currently plays in (PL, BGL, BL1, SA, PD).</summary>
+        public string? LeagueCode { get; set; }
     }
 }

@@ -34,6 +34,8 @@ namespace BPFL.API.Services.MatchServices
             if (!SportmonksClient.LeagueMap.TryGetValue(leagueCode.ToUpper(), out var leagueId))
                 throw new ArgumentException($"Unknown Sportmonks league code: {leagueCode}. Valid: {string.Join(", ", SportmonksClient.LeagueMap.Keys)}");
 
+            _currentLeagueCode = leagueCode.ToUpper();
+
             int added = 0, updated = 0;
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -75,6 +77,8 @@ namespace BPFL.API.Services.MatchServices
             if (!SportmonksClient.LeagueMap.TryGetValue(leagueCode.ToUpper(), out var leagueId))
                 throw new ArgumentException($"Unknown Sportmonks league code: {leagueCode}.");
 
+            _currentLeagueCode = leagueCode.ToUpper();
+
             var to   = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
             var from = to.AddDays(-daysBack);
 
@@ -109,14 +113,16 @@ namespace BPFL.API.Services.MatchServices
 
         // ── Shared upsert logic ───────────────────────────────────────
 
+        private string _currentLeagueCode = "";
+
         private async Task<(int added, int updated)> UpsertFixtureAsync(SmFixture fixture, CancellationToken ct)
         {
             var home = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "home");
             var away = fixture.Participants.FirstOrDefault(p => p.Meta?.Location == "away");
             if (home == null || away == null) return (0, 0);
 
-            var homeTeam = await EnsureTeamAsync(home, ct);
-            var awayTeam = await EnsureTeamAsync(away, ct);
+            var homeTeam = await EnsureTeamAsync(home, _currentLeagueCode, ct);
+            var awayTeam = await EnsureTeamAsync(away, _currentLeagueCode, ct);
 
             if (!DateTime.TryParse(fixture.StartingAt, out var matchDate)) return (0, 0);
             matchDate = DateTime.SpecifyKind(matchDate, DateTimeKind.Utc);
@@ -171,17 +177,18 @@ namespace BPFL.API.Services.MatchServices
             return (1, 0);
         }
 
-        private async Task<Team> EnsureTeamAsync(SmParticipant participant, CancellationToken ct)
+        private async Task<Team> EnsureTeamAsync(SmParticipant participant, string leagueCode, CancellationToken ct)
         {
             // Match by Sportmonks ID stored in ExternalId
             var team = await _db.Teams.FirstOrDefaultAsync(t => t.ExternalId == participant.Id, ct);
             if (team != null)
             {
                 if (team.Name != participant.Name) team.Name = participant.Name;
+                if (!string.IsNullOrEmpty(leagueCode)) team.LeagueCode = leagueCode;
                 return team;
             }
 
-            // Fuzzy name match — might be a football-data.org team we already have
+            // Fuzzy name match — might be a team we already have under a different ID
             var all = await _db.Teams.ToListAsync(ct);
             team = all.FirstOrDefault(t =>
                 string.Equals(t.Name, participant.Name, StringComparison.OrdinalIgnoreCase) ||
@@ -192,12 +199,13 @@ namespace BPFL.API.Services.MatchServices
             {
                 team.ExternalId = participant.Id;
                 team.Name = participant.Name;
+                if (!string.IsNullOrEmpty(leagueCode)) team.LeagueCode = leagueCode;
                 await _db.SaveChangesAsync(ct);
                 return team;
             }
 
             // Create new team
-            team = new Team { ExternalId = participant.Id, Name = participant.Name };
+            team = new Team { ExternalId = participant.Id, Name = participant.Name, LeagueCode = leagueCode };
             _db.Teams.Add(team);
             await _db.SaveChangesAsync(ct);
             return team;

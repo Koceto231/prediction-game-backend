@@ -15,5 +15,7 @@
         public decimal Price { get; set; }
 
         public string? PhotoUrl { get; set; }
+
+        public string? LeagueCode { get; set; }
     }
 }

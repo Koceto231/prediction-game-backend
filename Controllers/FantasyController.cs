@@ -145,6 +145,14 @@ namespace BPFL.API.Controllers
             return Ok(new { message = $"Scores calculated for gameweek {gameweekId}." });
         }
 
+        [HttpPost("admin/recalc-prices")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RecalcPrices(CancellationToken ct = default)
+        {
+            var updated = await _fantasy.RecalcPlayerPricesAsync(ct);
+            return Ok(new { message = $"Prices recalculated for {updated} players." });
+        }
+
         /// <summary>Sync fantasy players from team squads via football-data.org API.</summary>
         [HttpPost("admin/sync-players")]
         [Authorize(Roles = "Admin")]

@@ -93,13 +93,14 @@ namespace BPFL.API.Services.FantasyServices
 
             return players.Select(p => new FantasyPlayerResponseDTO
             {
-                Id       = p.Id,
-                Name     = p.Name,
-                Position = p.Position.ToString(),
-                TeamId   = p.TeamId,
-                TeamName = p.Team?.Name ?? "",
-                Price    = p.Price,
-                PhotoUrl = p.PhotoUrl,
+                Id         = p.Id,
+                Name       = p.Name,
+                Position   = p.Position.ToString(),
+                TeamId     = p.TeamId,
+                TeamName   = p.Team?.Name ?? "",
+                Price      = p.Price,
+                PhotoUrl   = p.PhotoUrl,
+                LeagueCode = p.Team?.LeagueCode,
             }).ToList();
         }
 
@@ -445,6 +446,76 @@ namespace BPFL.API.Services.FantasyServices
 
             await _db.SaveChangesAsync(ct);
             _logger.LogInformation("Calculated scores for gameweek {GW}: {Count} teams", gameweek.GameWeek, teamGroups.Count());
+        }
+
+        // ── Price recalculation ───────────────────────────────────────
+
+        /// <summary>
+        /// Recalculate fantasy player prices based on each team's historical
+        /// goals scored (last 60 matches). Better attacking teams get pricier
+        /// players. Prices are clamped to sensible ranges per position.
+        /// </summary>
+        public async Task<int> RecalcPlayerPricesAsync(CancellationToken ct = default)
+        {
+            // 1. Load recent finished matches with scores
+            var matches = await _db.Matches
+                .AsNoTracking()
+                .Where(m => m.Status == "FINISHED" && m.HomeScore != null && m.AwayScore != null)
+                .ToListAsync(ct);
+
+            // 2. Compute average goals scored per team
+            var goalsFor = new Dictionary<int, (double total, int count)>();
+            foreach (var m in matches)
+            {
+                Accumulate(goalsFor, m.HomeTeamId, m.HomeScore!.Value);
+                Accumulate(goalsFor, m.AwayTeamId, m.AwayScore!.Value);
+            }
+
+            static void Accumulate(Dictionary<int, (double, int)> d, int id, int goals)
+            {
+                var (t, c) = d.GetValueOrDefault(id);
+                d[id] = (t + goals, c + 1);
+            }
+
+            // 3. Turn into avg goals scored per game
+            var avgGoals = goalsFor.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.count >= 5 ? kv.Value.total / kv.Value.count : 1.2);
+
+            if (avgGoals.Count == 0) return 0;
+
+            // Normalise 0-1 across all teams
+            double minG = avgGoals.Values.Min();
+            double maxG = avgGoals.Values.Max();
+            double range = maxG - minG < 0.01 ? 1 : maxG - minG;
+
+            double Strength(int teamId) =>
+                avgGoals.TryGetValue(teamId, out var g) ? (g - minG) / range : 0.5;
+
+            // Price bands per position: [min, max]
+            static (decimal min, decimal max) Band(FantasyPlayer.FantasyPosition pos) => pos switch
+            {
+                FantasyPlayer.FantasyPosition.GK  => (4.5m, 8.0m),
+                FantasyPlayer.FantasyPosition.DEF => (4.5m, 9.0m),
+                FantasyPlayer.FantasyPosition.MID => (5.0m, 11.5m),
+                FantasyPlayer.FantasyPosition.FWD => (5.5m, 13.0m),
+                _ => (5.0m, 9.0m)
+            };
+
+            // 4. Update prices
+            var players = await _db.FantasyPlayers.Where(p => p.IsActive).ToListAsync(ct);
+            foreach (var p in players)
+            {
+                var s = Strength(p.TeamId);
+                var (lo, hi) = Band(p.Position);
+                // Round to nearest 0.5
+                var raw  = lo + (decimal)s * (hi - lo);
+                p.Price  = Math.Round(raw * 2, MidpointRounding.AwayFromZero) / 2;
+                p.LastUpdatedAt = DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return players.Count;
         }
 
         // ── Helpers ───────────────────────────────────────────────────
