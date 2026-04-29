@@ -122,7 +122,7 @@ namespace BPFL.API.Controllers
 
         // ── Debug ────────────────────────────────────────────────────
 
-        /// <summary>Returns raw Sportmonks squad for a team so we can inspect position fields.</summary>
+        /// <summary>Returns raw Sportmonks squad for a team — includes ImagePath to verify photo availability.</summary>
         [HttpGet("debug/squad/{sportmonksTeamId:int}")]
         public async Task<IActionResult> DebugSquad(int sportmonksTeamId, CancellationToken ct = default)
         {
@@ -138,8 +138,26 @@ namespace BPFL.API.Controllers
                 PlayerPosId      = sp.Player?.PositionId,
                 PosName          = sp.Player?.Position?.Name,
                 PosCode          = sp.Player?.Position?.Code,
+                ImagePath        = sp.Player?.ImagePath,          // ← photo URL check
             });
-            return Ok(new { total = squad.Count, sample = preview });
+            var withPhotos = squad.Count(sp => !string.IsNullOrEmpty(sp.Player?.ImagePath));
+            return Ok(new { total = squad.Count, withPhotos, sample = preview });
+        }
+
+        /// <summary>Check how many fantasy players in the DB already have a PhotoUrl.</summary>
+        [HttpGet("debug/photos")]
+        public async Task<IActionResult> DebugPhotos(CancellationToken ct = default)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<BPFL.API.Data.BPFL_DBContext>();
+            var total   = await db.FantasyPlayers.CountAsync(ct);
+            var hasPhoto = await db.FantasyPlayers.CountAsync(p => p.PhotoUrl != null, ct);
+            var sample  = await db.FantasyPlayers
+                .Where(p => p.PhotoUrl != null)
+                .Take(5)
+                .Select(p => new { p.Id, p.Name, p.PhotoUrl })
+                .ToListAsync(ct);
+            return Ok(new { total, hasPhoto, noPhoto = total - hasPhoto, sample });
         }
 
         // ── Scoring ───────────────────────────────────────────────────
