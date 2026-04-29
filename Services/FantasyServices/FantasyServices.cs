@@ -168,15 +168,31 @@ namespace BPFL.API.Services.FantasyServices
 
         public async Task SaveFantasySelectionAsync(int userId, SaveFantasySelectionDTO dto, CancellationToken ct = default)
         {
-            var team = await _db.FantasyTeams.FirstOrDefaultAsync(t => t.UserId == userId, ct)
-                ?? throw new InvalidOperationException("User doesn't have a fantasy team.");
+            // Auto-create a FantasyTeam for the user if one doesn't exist yet
+            var team = await _db.FantasyTeams.FirstOrDefaultAsync(t => t.UserId == userId, ct);
+            if (team == null)
+            {
+                var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+                team = new FantasyTeam
+                {
+                    UserId          = userId,
+                    TeamName        = user != null ? $"{user.Username}'s Team" : "My Fantasy Team",
+                    Budget          = 100,
+                    RemainingBudget = 100,
+                    CreatedAt       = DateTime.UtcNow,
+                    UpdatedAt       = DateTime.UtcNow,
+                };
+                _db.FantasyTeams.Add(team);
+                await _db.SaveChangesAsync(ct);
+            }
 
             var gameweek = await _db.FantasyGameweeks.AsNoTracking()
                 .FirstOrDefaultAsync(g => g.Id == dto.FantasyGameweekId, ct)
                 ?? throw new KeyNotFoundException("Gameweek not found.");
 
-            if (gameweek.IsLocked)
-                throw new InvalidOperationException("Gameweek is locked — selections are closed.");
+            // Allow editing if the gameweek has not completed yet (IsCompleted = hard lock)
+            if (gameweek.IsCompleted)
+                throw new InvalidOperationException("Gameweek is completed — selections are closed.");
 
             if (dto.SelectedPlayerIds.Count != 11)
                 throw new InvalidOperationException("You must select exactly 11 players.");

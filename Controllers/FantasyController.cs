@@ -90,8 +90,19 @@ namespace BPFL.API.Controllers
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
 
-            await _fantasy.SaveFantasySelectionAsync(userId.Value, dto, ct);
-            return Ok(new { message = "Selection saved." });
+            try
+            {
+                await _fantasy.SaveFantasySelectionAsync(userId.Value, dto, ct);
+                return Ok(new { message = "Selection saved." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
         }
 
         // ── Leaderboard ───────────────────────────────────────────────
