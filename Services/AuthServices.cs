@@ -25,6 +25,7 @@ namespace BPFL.API.Services
         public static AuthResult Ok() => new() { Success = true };
         public static AuthResult Ok(AuthTokenDTO tokens) => new() { Success = true, Tokens = tokens };
         public static AuthResult Ok(UserResponseDTO user) => new() { Success = true, User = user };
+        public static AuthResult Ok(AuthTokenDTO tokens, UserResponseDTO user) => new() { Success = true, Tokens = tokens, User = user };
         public static AuthResult Fail(string error) => new() { Success = false, Error = error };
     }
 
@@ -152,11 +153,10 @@ namespace BPFL.API.Services
 
             _logger.LogInformation("User logged in: {UserId}", user.Id);
 
-            return AuthResult.Ok(new AuthTokenDTO
-            {
-                AccessToken = accesstoken,
-                RefreshToken = refreshToken
-            });
+            return AuthResult.Ok(
+                new AuthTokenDTO { AccessToken = accesstoken, RefreshToken = refreshToken },
+                new UserResponseDTO { Id = user.Id, Email = user.Email, Username = user.Username, Role = user.Role }
+            );
         }
 
         public async Task<AuthResult> RefreshTokenAsync(string rawRefreshToken, CancellationToken ct = default)

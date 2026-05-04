@@ -66,11 +66,10 @@ namespace BPFL.API.Services
                 "Google login successful for user {UserId} ({Email})",
                 user.Id, user.Email);
 
-            return AuthResult.Ok(new AuthTokenDTO
-            {
-                AccessToken = accesstoken,
-                RefreshToken = refreshToken
-            });
+            return AuthResult.Ok(
+                new AuthTokenDTO { AccessToken = accesstoken, RefreshToken = refreshToken },
+                new UserResponseDTO { Id = user.Id, Email = user.Email, Username = user.Username, Role = user.Role }
+            );
 
 
         }
