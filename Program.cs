@@ -2,12 +2,6 @@ using BPFL.API.BackgroundJobs;
 using BPFL.API.Config;
 using BPFL.API.Data;
 using BPFL.API.Middleware;
-using BPFL.API.Services;
-using BPFL.API.Services.Agents;
-using BPFL.API.Services.External;
-using BPFL.API.Services.FantasyServices;
-using BPFL.API.Services.MatchServices;
-using BPFL.API.Shared;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -34,7 +28,7 @@ builder.Services.AddDbContext<BPFL_DBContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorCodesToAdd: null);
-      }));
+        }));
 
 
 

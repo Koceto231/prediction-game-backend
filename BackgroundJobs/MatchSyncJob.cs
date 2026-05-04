@@ -1,8 +1,4 @@
-﻿
 using BPFL.API.Data;
-using BPFL.API.Services;
-using BPFL.API.Services.FantasyServices;
-using BPFL.API.Services.MatchServices;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.BackgroundJobs
@@ -98,4 +94,3 @@ namespace BPFL.API.BackgroundJobs
         }
     }
 }
-

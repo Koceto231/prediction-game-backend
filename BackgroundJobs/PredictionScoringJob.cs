@@ -1,7 +1,5 @@
-﻿using BPFL.API.Data;
+using BPFL.API.Data;
 using BPFL.API.Models;
-using BPFL.API.Services;
-using BPFL.API.Services.FantasyServices;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.BackgroundJobs
@@ -13,32 +11,25 @@ namespace BPFL.API.BackgroundJobs
         private readonly IConfiguration configuration;
 
         private TimeSpan SyncInterval =>
-     TimeSpan.FromMinutes(configuration.GetValue<double>("BackgroundJobs:MatchSyncIntervalMinutes", 2));
+            TimeSpan.FromMinutes(configuration.GetValue<double>("BackgroundJobs:ScoringIntervalMinutes", 2));
+
         public PredictionScoringJob(IServiceScopeFactory _scopeFactory, ILogger<PredictionScoringJob> _logger,
             IConfiguration _configuration)
         {
-            scopeFactory = _scopeFactory;
-            logger = _logger;
+            scopeFactory  = _scopeFactory;
+            logger        = _logger;
             configuration = _configuration;
         }
 
-
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            logger.LogInformation("MatchSyncJob started. Interval: {Interval}", SyncInterval);
-
+            logger.LogInformation("PredictionScoringJob started. Interval: {Interval}", SyncInterval);
             await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                try
-                {
-                    await RunCycleAsync(stoppingToken);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Unexpected error in MatchSyncJob.");
-                }
+                try { await RunCycleAsync(stoppingToken); }
+                catch (Exception ex) { logger.LogError(ex, "Unexpected error in PredictionScoringJob."); }
 
                 await Task.Delay(SyncInterval, stoppingToken);
             }
@@ -50,10 +41,10 @@ namespace BPFL.API.BackgroundJobs
 
             using var scope = scopeFactory.CreateScope();
 
-            var scoring          = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
-            var betService       = scope.ServiceProvider.GetRequiredService<BetService>();
-            var fantasyAutoSync  = scope.ServiceProvider.GetRequiredService<FantasyAutoSyncService>();
-            var db               = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
+            var scoring         = scope.ServiceProvider.GetRequiredService<PredictionScoringService>();
+            var betService      = scope.ServiceProvider.GetRequiredService<BetService>();
+            var fantasyAutoSync = scope.ServiceProvider.GetRequiredService<FantasyAutoSyncService>();
+            var db              = scope.ServiceProvider.GetRequiredService<BPFL_DBContext>();
 
             // Auto-create gameweeks from matchdays & finalise any completed ones
             try { await fantasyAutoSync.SyncGameweeksFromMatchdaysAsync(ct); }
@@ -92,24 +83,13 @@ namespace BPFL.API.BackgroundJobs
                 totalScored += result.ScoredPredictionsCount;
 
                 if (match.HomeScore != null && match.AwayScore != null)
-                {
                     await betService.ResolveMatchBetsAsync(match.Id, match.HomeScore.Value, match.AwayScore.Value, ct);
-                }
 
-                // Auto-fetch goals/assists/bookings and record fantasy stats
-                try
-                {
-                    await fantasyAutoSync.SyncMatchStatsAsync(match.Id, match.ExternalId, ct);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Fantasy stats sync failed for match {Id}", match.Id);
-                }
+                try { await fantasyAutoSync.SyncMatchStatsAsync(match.Id, match.ExternalId, ct); }
+                catch (Exception ex) { logger.LogWarning(ex, "Fantasy stats sync failed for match {Id}", match.Id); }
             }
 
-            logger.LogInformation(
-                "Prediction scoring cycle completed. Total predictions scored: {Total}",
-                totalScored);
+            logger.LogInformation("Prediction scoring cycle completed. Total predictions scored: {Total}", totalScored);
         }
     }
 }

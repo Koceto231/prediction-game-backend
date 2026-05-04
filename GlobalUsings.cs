@@ -1,0 +1,12 @@
+global using BPFL.API.Features.Auth;
+global using BPFL.API.Features.Fantasy;
+global using BPFL.API.Features.Matches;
+global using BPFL.API.Features.Betting;
+global using BPFL.API.Features.Predictions;
+global using BPFL.API.Features.Leaderboard;
+global using BPFL.API.Features.Leagues;
+global using BPFL.API.Features.Profile;
+global using BPFL.API.Features.Wallet;
+global using BPFL.API.Features.Admin;
+global using BPFL.API.Shared;
+global using BPFL.API.Shared.External;
