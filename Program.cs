@@ -7,6 +7,7 @@ using BPFL.API.Services.Agents;
 using BPFL.API.Services.External;
 using BPFL.API.Services.FantasyServices;
 using BPFL.API.Services.MatchServices;
+using BPFL.API.Shared;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -22,6 +23,7 @@ using System.Threading.RateLimiting;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IAppCache, MemoryAppCache>();
 
 builder.Services.AddDbContext<BPFL_DBContext>(options =>
     options.UseNpgsql(

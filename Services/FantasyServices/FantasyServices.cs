@@ -2,6 +2,7 @@ using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Models.FantasyDTO;
 using BPFL.API.Models.FantasyModel;
+using BPFL.API.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace BPFL.API.Services.FantasyServices
@@ -10,11 +11,21 @@ namespace BPFL.API.Services.FantasyServices
     {
         private readonly BPFL_DBContext _db;
         private readonly ILogger<FantasyServices> _logger;
+        private readonly IAppCache _cache;
 
-        public FantasyServices(BPFL_DBContext db, ILogger<FantasyServices> logger)
+        private const string CurrentGameweekKey = "fantasy:gameweek:current";
+        private const string PlayersKey          = "fantasy:players";
+        private static string LeaderboardKey(int gwId) => $"fantasy:leaderboard:{gwId}";
+
+        private static readonly TimeSpan GameweekTtl    = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan PlayersTtl     = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan LeaderboardTtl = TimeSpan.FromMinutes(2);
+
+        public FantasyServices(BPFL_DBContext db, ILogger<FantasyServices> logger, IAppCache cache)
         {
-            _db = db;
+            _db     = db;
             _logger = logger;
+            _cache  = cache;
         }
 
         // ── Scoring rules ─────────────────────────────────────────────
@@ -46,13 +57,20 @@ namespace BPFL.API.Services.FantasyServices
 
         public async Task<FantasyGameweekResponseDTO?> GetCurrentFantasyGameweekAsync(CancellationToken ct = default)
         {
+            var cached = await _cache.GetAsync<FantasyGameweekResponseDTO>(CurrentGameweekKey, ct);
+            if (cached != null) return cached;
+
             var gameweek = await _db.FantasyGameweeks
                 .AsNoTracking()
                 .Where(g => !g.IsCompleted)
                 .OrderBy(g => g.GameWeek)
                 .FirstOrDefaultAsync(ct);
 
-            return gameweek == null ? null : MapGameweek(gameweek);
+            if (gameweek == null) return null;
+
+            var result = MapGameweek(gameweek);
+            await _cache.SetAsync(CurrentGameweekKey, result, GameweekTtl, ct);
+            return result;
         }
 
         public async Task<FantasyGameweekResponseDTO> CreateGameweekAsync(CreateFantasyGameweekDTO dto, CancellationToken ct = default)
@@ -81,6 +99,9 @@ namespace BPFL.API.Services.FantasyServices
 
         public async Task<List<FantasyPlayerResponseDTO>> GetFantasyPlayersAsync(CancellationToken ct = default)
         {
+            var cached = await _cache.GetAsync<List<FantasyPlayerResponseDTO>>(PlayersKey, ct);
+            if (cached != null) return cached;
+
             // Fetch from DB first, then map in memory to avoid EF/Npgsql
             // failing to translate enum.ToString() to SQL
             var players = await _db.FantasyPlayers
@@ -91,7 +112,7 @@ namespace BPFL.API.Services.FantasyServices
                 .ThenBy(p => p.Price)
                 .ToListAsync(ct);
 
-            return players.Select(p => new FantasyPlayerResponseDTO
+            var result = players.Select(p => new FantasyPlayerResponseDTO
             {
                 Id         = p.Id,
                 Name       = p.Name,
@@ -102,6 +123,9 @@ namespace BPFL.API.Services.FantasyServices
                 PhotoUrl   = p.PhotoUrl,
                 LeagueCode = p.Team?.LeagueCode,
             }).ToList();
+
+            await _cache.SetAsync(PlayersKey, result, PlayersTtl, ct);
+            return result;
         }
 
         public async Task<FantasyPlayerResponseDTO> AddPlayerAsync(AddFantasyPlayerDTO dto, CancellationToken ct = default)
@@ -126,6 +150,7 @@ namespace BPFL.API.Services.FantasyServices
 
             _db.FantasyPlayers.Add(player);
             await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(PlayersKey, ct);
 
             return new FantasyPlayerResponseDTO
             {
@@ -327,6 +352,10 @@ namespace BPFL.API.Services.FantasyServices
         public async Task<List<FantasyLeaderboardRowDTO>> GetFantasyLeaderboardAsync(
             int fantasyGameweekId, CancellationToken ct = default)
         {
+            var cacheKey = LeaderboardKey(fantasyGameweekId);
+            var cached   = await _cache.GetAsync<List<FantasyLeaderboardRowDTO>>(cacheKey, ct);
+            if (cached != null) return cached;
+
             _ = await _db.FantasyGameweeks.AsNoTracking()
                 .FirstOrDefaultAsync(g => g.Id == fantasyGameweekId, ct)
                 ?? throw new KeyNotFoundException("Gameweek not found.");
@@ -344,7 +373,7 @@ namespace BPFL.API.Services.FantasyServices
                 .ThenBy(r => r.TeamName)
                 .ToListAsync(ct);
 
-            return rows.Select((r, i) => new FantasyLeaderboardRowDTO
+            var result = rows.Select((r, i) => new FantasyLeaderboardRowDTO
             {
                 Rank            = i + 1,
                 UserId          = r.UserId,
@@ -352,6 +381,9 @@ namespace BPFL.API.Services.FantasyServices
                 FantasyTeamName = r.TeamName,
                 WeeklyPoints    = r.WeeklyPoints,
             }).ToList();
+
+            await _cache.SetAsync(cacheKey, result, LeaderboardTtl, ct);
+            return result;
         }
 
         // ── Admin: player stats ───────────────────────────────────────
@@ -461,6 +493,7 @@ namespace BPFL.API.Services.FantasyServices
             }
 
             await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(LeaderboardKey(gameweekId), ct);
             _logger.LogInformation("Calculated scores for gameweek {GW}: {Count} teams", gameweek.GameWeek, teamGroups.Count());
         }
 
@@ -531,6 +564,7 @@ namespace BPFL.API.Services.FantasyServices
             }
 
             await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(PlayersKey, ct);
             return players.Count;
         }
 

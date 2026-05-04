@@ -2,6 +2,7 @@ using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Models.DTO;
 using BPFL.API.Models.FantasyModel;
+using BPFL.API.Shared;
 using Microsoft.EntityFrameworkCore;
 using static BPFL.API.Models.Predictionenums;
 
@@ -13,6 +14,7 @@ namespace BPFL.API.Services
         private readonly MatchAnalysisService _analysisService;
         private readonly PredictionModelService _modelService;
         private readonly ILogger<OddsService> _logger;
+        private readonly IAppCache _cache;
 
         private const double HouseEdge = 0.90;
         private const decimal MinOdds  = 1.05m;
@@ -21,16 +23,20 @@ namespace BPFL.API.Services
         private const double AvgCorners     = 10.0;
         private const double AvgYellowCards = 3.8;
 
+        private static readonly TimeSpan OddsTtl = TimeSpan.FromSeconds(30);
+
         public OddsService(
             BPFL_DBContext db,
             MatchAnalysisService analysisService,
             PredictionModelService modelService,
-            ILogger<OddsService> logger)
+            ILogger<OddsService> logger,
+            IAppCache cache)
         {
-            _db = db;
+            _db              = db;
             _analysisService = analysisService;
-            _modelService = modelService;
-            _logger = logger;
+            _modelService    = modelService;
+            _logger          = logger;
+            _cache           = cache;
         }
 
         public async Task EnsureOddsForUpcomingMatchesAsync(CancellationToken ct = default)
@@ -85,6 +91,11 @@ namespace BPFL.API.Services
             DoubleChancePick? dcPick        = null,
             CancellationToken ct            = default)
         {
+            // Build a deterministic cache key from all parameters
+            var cacheKey = $"odds:{matchId}:{betType}:{winnerPick}:{scoreHome}:{scoreAway}:{bttsPick}:{ouLine}:{ouPick}:{goalscorerId}:{lineValue}:{dcPick}";
+            var cached = await _cache.GetAsync<BetOddsDTO>(cacheKey, ct);
+            if (cached != null) return cached;
+
             var match = await _db.Matches.AsNoTracking()
                 .FirstOrDefaultAsync(m => m.Id == matchId, ct);
 
@@ -94,102 +105,84 @@ namespace BPFL.API.Services
             double lH = match.ExpectedHomeGoals.Value;
             double lA = match.ExpectedAwayGoals.Value;
 
-            switch (betType)
+            BetOddsDTO? result = betType switch
             {
                 // ── 1 / X / 2 ──────────────────────────────────────────────
-                case BetType.Winner when winnerPick != null:
-                    return new BetOddsDTO
+                BetType.Winner when winnerPick != null => new BetOddsDTO
+                {
+                    Odds = winnerPick switch
                     {
-                        Odds = winnerPick switch
-                        {
-                            MatchWinner.Home => match.HomeOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Home)),
-                            MatchWinner.Draw => match.DrawOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Draw)),
-                            MatchWinner.Away => match.AwayOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Away)),
-                            _ => MinOdds
-                        },
-                        Description = winnerPick.ToString()!
-                    };
+                        MatchWinner.Home => match.HomeOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Home)),
+                        MatchWinner.Draw => match.DrawOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Draw)),
+                        MatchWinner.Away => match.AwayOdds ?? ToOdds(WinnerProb(lH, lA, MatchWinner.Away)),
+                        _ => MinOdds
+                    },
+                    Description = winnerPick.ToString()!
+                },
 
                 // ── Exact Score ─────────────────────────────────────────────
-                case BetType.ExactScore when scoreHome != null && scoreAway != null:
-                    return new BetOddsDTO
-                    {
-                        Odds = ExactScoreOdds(lH, lA, scoreHome.Value, scoreAway.Value),
-                        Description = $"{scoreHome}-{scoreAway}"
-                    };
+                BetType.ExactScore when scoreHome != null && scoreAway != null => new BetOddsDTO
+                {
+                    Odds        = ExactScoreOdds(lH, lA, scoreHome.Value, scoreAway.Value),
+                    Description = $"{scoreHome}-{scoreAway}"
+                },
 
                 // ── BTTS ────────────────────────────────────────────────────
-                case BetType.BTTS when bttsPick != null:
-                    return new BetOddsDTO
-                    {
-                        Odds = BTTSOdds(lH, lA, bttsPick.Value),
-                        Description = bttsPick.Value ? "BTTS Yes" : "BTTS No"
-                    };
+                BetType.BTTS when bttsPick != null => new BetOddsDTO
+                {
+                    Odds        = BTTSOdds(lH, lA, bttsPick.Value),
+                    Description = bttsPick.Value ? "BTTS Yes" : "BTTS No"
+                },
 
                 // ── Over / Under Goals ──────────────────────────────────────
-                case BetType.OverUnder when ouLine != null && ouPick != null:
-                    return new BetOddsDTO
-                    {
-                        Odds = OUOdds(lH, lA, ouLine.Value, ouPick.Value),
-                        Description = $"{ouPick} {OULineValue(ouLine.Value)}"
-                    };
-
-                // ── Goalscorer ──────────────────────────────────────────────
-                case BetType.Goalscorer when goalscorerId != null:
-                    return await GoalscorerOddsAsync(match, lH, lA, goalscorerId.Value, ct);
+                BetType.OverUnder when ouLine != null && ouPick != null => new BetOddsDTO
+                {
+                    Odds        = OUOdds(lH, lA, ouLine.Value, ouPick.Value),
+                    Description = $"{ouPick} {OULineValue(ouLine.Value)}"
+                },
 
                 // ── Corners O/U ─────────────────────────────────────────────
-                case BetType.Corners when lineValue != null && ouPick != null:
+                BetType.Corners when lineValue != null && ouPick != null => new BetOddsDTO
                 {
-                    double thr = (double)lineValue.Value;
-                    double p   = PoissonCdfOver(AvgCorners, thr);
-                    double prob = ouPick == OverUnderPick.Over ? p : 1 - p;
-                    return new BetOddsDTO
-                    {
-                        Odds        = ToOdds(prob),
-                        Description = $"Corners {ouPick} {lineValue}"
-                    };
-                }
+                    Odds        = ToOdds(ouPick == OverUnderPick.Over
+                                    ? PoissonCdfOver(AvgCorners, (double)lineValue.Value)
+                                    : 1 - PoissonCdfOver(AvgCorners, (double)lineValue.Value)),
+                    Description = $"Corners {ouPick} {lineValue}"
+                },
 
                 // ── Yellow Cards O/U ────────────────────────────────────────
-                case BetType.YellowCards when lineValue != null && ouPick != null:
+                BetType.YellowCards when lineValue != null && ouPick != null => new BetOddsDTO
                 {
-                    double thr  = (double)lineValue.Value;
-                    double p    = PoissonCdfOver(AvgYellowCards, thr);
-                    double prob = ouPick == OverUnderPick.Over ? p : 1 - p;
-                    return new BetOddsDTO
-                    {
-                        Odds        = ToOdds(prob),
-                        Description = $"Yellow Cards {ouPick} {lineValue}"
-                    };
-                }
+                    Odds        = ToOdds(ouPick == OverUnderPick.Over
+                                    ? PoissonCdfOver(AvgYellowCards, (double)lineValue.Value)
+                                    : 1 - PoissonCdfOver(AvgYellowCards, (double)lineValue.Value)),
+                    Description = $"Yellow Cards {ouPick} {lineValue}"
+                },
 
                 // ── Double Chance ───────────────────────────────────────────
-                case BetType.DoubleChance when dcPick != null:
+                BetType.DoubleChance when dcPick != null => new BetOddsDTO
                 {
-                    double home = WinnerProb(lH, lA, MatchWinner.Home);
-                    double draw = WinnerProb(lH, lA, MatchWinner.Draw);
-                    double away = WinnerProb(lH, lA, MatchWinner.Away);
-                    double prob = dcPick switch
+                    Odds = ToOdds(dcPick switch
                     {
-                        DoubleChancePick.HomeOrDraw => home + draw,
-                        DoubleChancePick.HomeOrAway => home + away,
-                        DoubleChancePick.DrawOrAway => draw + away,
-                        _                           => 0
-                    };
-                    string label = dcPick switch
-                    {
-                        DoubleChancePick.HomeOrDraw => "1X",
-                        DoubleChancePick.HomeOrAway => "12",
-                        DoubleChancePick.DrawOrAway => "X2",
-                        _                           => ""
-                    };
-                    return new BetOddsDTO { Odds = ToOdds(prob), Description = $"Double Chance {label}" };
-                }
+                        DoubleChancePick.HomeOrDraw => WinnerProb(lH, lA, MatchWinner.Home) + WinnerProb(lH, lA, MatchWinner.Draw),
+                        DoubleChancePick.HomeOrAway => WinnerProb(lH, lA, MatchWinner.Home) + WinnerProb(lH, lA, MatchWinner.Away),
+                        DoubleChancePick.DrawOrAway => WinnerProb(lH, lA, MatchWinner.Draw) + WinnerProb(lH, lA, MatchWinner.Away),
+                        _ => 0
+                    }),
+                    Description = $"Double Chance {dcPick switch { DoubleChancePick.HomeOrDraw => "1X", DoubleChancePick.HomeOrAway => "12", _ => "X2" }}"
+                },
 
-                default:
-                    return null;
-            }
+                _ => null
+            };
+
+            // Goalscorer requires async so handle separately
+            if (result == null && betType == BetType.Goalscorer && goalscorerId != null)
+                result = await GoalscorerOddsAsync(match, lH, lA, goalscorerId.Value, ct);
+
+            if (result != null)
+                await _cache.SetAsync(cacheKey, result, OddsTtl, ct);
+
+            return result;
         }
 
         // ── Goalscorer odds ───────────────────────────────────────────────
