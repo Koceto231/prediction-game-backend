@@ -1,6 +1,7 @@
 using BPFL.API.Data;
 using BPFL.API.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using static BPFL.API.Models.Predictionenums;
 
 namespace BPFL.API.Features.Betting
@@ -82,6 +83,92 @@ namespace BPFL.API.Features.Betting
             return ToDTO(bet, match, oddsResult.Description, scorerName);
         }
 
+        // ── Accumulator ──────────────────────────────────────────────────────────
+
+        public async Task<BetResponseDTO> PlaceAccumulatorAsync(int userId, PlaceAccumulatorDTO dto, CancellationToken ct = default)
+        {
+            if (dto.Amount <= 0)
+                throw new ArgumentException("Bet amount must be greater than zero.");
+            if (dto.Legs is null || dto.Legs.Count < 2)
+                throw new ArgumentException("An accumulator requires at least 2 legs.");
+
+            var match = await _db.Matches
+                .Include(m => m.HomeTeam)
+                .Include(m => m.AwayTeam)
+                .FirstOrDefaultAsync(m => m.Id == dto.MatchId, ct)
+                ?? throw new KeyNotFoundException($"Match {dto.MatchId} not found.");
+
+            if (match.MatchDate <= DateTime.UtcNow)
+                throw new InvalidOperationException("Cannot place a bet after the match has started.");
+
+            // Resolve odds for each leg
+            var legResults = new List<(AccumulatorLegDTO Leg, decimal Odds, string Desc)>();
+            foreach (var leg in dto.Legs)
+            {
+                var odds = await _oddsService.GetDynamicOddsAsync(
+                    dto.MatchId, leg.BetType,
+                    leg.Pick, null, null,
+                    leg.BTTSPick, leg.OULine, leg.OUPick,
+                    leg.GoalscorerId, leg.LineValue, leg.DCPick, ct)
+                    ?? throw new InvalidOperationException($"Odds not available for leg: {leg.BetType}.");
+
+                legResults.Add((leg, odds.Odds, odds.Description));
+            }
+
+            decimal combinedOdds = legResults.Aggregate(1m, (acc, r) => acc * r.Odds);
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+                ?? throw new KeyNotFoundException("User not found.");
+
+            if (user.Balance < dto.Amount)
+                throw new InvalidOperationException("Insufficient balance.");
+
+            user.Balance -= dto.Amount;
+
+            // Serialise legs to JSON for storage
+            var legsData = legResults.Select(r => new
+            {
+                betType    = r.Leg.BetType.ToString(),
+                description= r.Desc,
+                odds       = r.Odds,
+                pick       = r.Leg.Pick?.ToString(),
+                dcPick     = r.Leg.DCPick?.ToString(),
+                bttsPick   = r.Leg.BTTSPick,
+                ouLine     = r.Leg.OULine?.ToString(),
+                ouPick     = r.Leg.OUPick?.ToString(),
+                lineValue  = r.Leg.LineValue,
+                goalscorerId = r.Leg.GoalscorerId
+            }).ToList();
+
+            var legsJson = JsonSerializer.Serialize(legsData);
+
+            var bet = new Bet
+            {
+                UserId             = userId,
+                MatchId            = dto.MatchId,
+                BetType            = BetType.Accumulator,
+                Amount             = dto.Amount,
+                OddsAtBetTime      = Math.Round(combinedOdds, 2),
+                PotentialPayout    = Math.Round(dto.Amount * combinedOdds, 2),
+                Status             = BetStatus.Pending,
+                AccumulatorLegsJson = legsJson
+            };
+
+            _db.Bets.Add(bet);
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Accumulator placed: UserId={UserId} MatchId={MatchId} Legs={Legs} CombOdds={Odds} Amount={Amount}",
+                userId, dto.MatchId, dto.Legs.Count, combinedOdds, dto.Amount);
+
+            return ToAccumulatorDTO(bet, match, legResults.Select(r => new AccumulatorLegResponseDTO
+            {
+                BetType     = r.Leg.BetType,
+                Description = r.Desc,
+                Odds        = r.Odds
+            }).ToList());
+        }
+
         public async Task<List<BetResponseDTO>> GetMyBetsAsync(int userId, CancellationToken ct = default)
         {
             var bets = await _db.Bets
@@ -103,6 +190,11 @@ namespace BPFL.API.Features.Betting
 
             return bets.Select(b =>
             {
+                if (b.BetType == BetType.Accumulator)
+                {
+                    var legs = ParseAccumulatorLegsJson(b.AccumulatorLegsJson);
+                    return ToAccumulatorDTO(b, b.Match, legs);
+                }
                 string? sName = b.GoalscorerId != null && scorerNames.TryGetValue(b.GoalscorerId.Value, out var n) ? n : null;
                 return ToDTO(b, b.Match, BuildDescription(b, b.Match, sName), sName);
             }).ToList();
@@ -153,6 +245,7 @@ namespace BPFL.API.Features.Betting
                     BetType.YellowCards => bet.LineValue != null && bet.OUPick != null && match?.TotalYellowCards != null &&
                                           IsSpecialOUWin(match.TotalYellowCards.Value, (double)bet.LineValue.Value, bet.OUPick.Value),
                     BetType.DoubleChance => bet.DCPick != null && IsDCWin(actualWinner, bet.DCPick.Value),
+                    BetType.Accumulator  => ResolveAccumulatorLegs(bet, actualWinner, actualBTTS, totalGoals, scorers, match),
                     _                   => false
                 };
 
@@ -166,6 +259,75 @@ namespace BPFL.API.Features.Betting
         }
 
         // ── Helpers ─────────────────────────────────────────────────────
+
+        private static bool ResolveAccumulatorLegs(
+            Bet bet, MatchWinner actualWinner, bool actualBTTS, int totalGoals,
+            HashSet<int> scorers, Match? match)
+        {
+            if (string.IsNullOrWhiteSpace(bet.AccumulatorLegsJson)) return false;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(bet.AccumulatorLegsJson);
+                foreach (var elem in doc.RootElement.EnumerateArray())
+                {
+                    var betTypeStr = elem.GetProperty("betType").GetString() ?? "";
+                    if (!Enum.TryParse<BetType>(betTypeStr, out var legType)) return false;
+
+                    bool legWon = legType switch
+                    {
+                        BetType.Winner =>
+                            elem.TryGetProperty("pick", out var pickEl) &&
+                            Enum.TryParse<MatchWinner>(pickEl.GetString(), out var pw) &&
+                            pw == actualWinner,
+
+                        BetType.BTTS =>
+                            elem.TryGetProperty("bttsPick", out var bttsEl) &&
+                            bttsEl.ValueKind != JsonValueKind.Null &&
+                            bttsEl.GetBoolean() == actualBTTS,
+
+                        BetType.OverUnder =>
+                            elem.TryGetProperty("ouLine", out var olEl) &&
+                            elem.TryGetProperty("ouPick", out var opEl) &&
+                            Enum.TryParse<OverUnderLine>(olEl.GetString(), out var ol) &&
+                            Enum.TryParse<OverUnderPick>(opEl.GetString(), out var op) &&
+                            IsOUWin(totalGoals, ol, op),
+
+                        BetType.DoubleChance =>
+                            elem.TryGetProperty("dcPick", out var dcEl) &&
+                            Enum.TryParse<DoubleChancePick>(dcEl.GetString(), out var dc) &&
+                            IsDCWin(actualWinner, dc),
+
+                        BetType.Goalscorer =>
+                            elem.TryGetProperty("goalscorerId", out var gsEl) &&
+                            gsEl.ValueKind != JsonValueKind.Null &&
+                            scorers.Contains(gsEl.GetInt32()),
+
+                        BetType.Corners =>
+                            match?.TotalCorners != null &&
+                            elem.TryGetProperty("lineValue", out var clEl) &&
+                            elem.TryGetProperty("ouPick", out var copEl) &&
+                            clEl.ValueKind != JsonValueKind.Null &&
+                            Enum.TryParse<OverUnderPick>(copEl.GetString(), out var cop) &&
+                            IsSpecialOUWin(match.TotalCorners.Value, clEl.GetDecimal() is var cv ? (double)cv : 0, cop),
+
+                        BetType.YellowCards =>
+                            match?.TotalYellowCards != null &&
+                            elem.TryGetProperty("lineValue", out var ylEl) &&
+                            elem.TryGetProperty("ouPick", out var yopEl) &&
+                            ylEl.ValueKind != JsonValueKind.Null &&
+                            Enum.TryParse<OverUnderPick>(yopEl.GetString(), out var yop) &&
+                            IsSpecialOUWin(match.TotalYellowCards.Value, ylEl.GetDecimal() is var yv ? (double)yv : 0, yop),
+
+                        _ => false
+                    };
+
+                    if (!legWon) return false; // all legs must win
+                }
+                return true;
+            }
+            catch { return false; }
+        }
 
         private static bool IsOUWin(int total, OverUnderLine line, OverUnderPick pick)
         {
@@ -229,6 +391,45 @@ namespace BPFL.API.Features.Betting
         {
             OverUnderLine.Line15 => "1.5", OverUnderLine.Line25 => "2.5",
             OverUnderLine.Line35 => "3.5", _                    => ""
+        };
+
+        private static List<AccumulatorLegResponseDTO> ParseAccumulatorLegsJson(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return [];
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.EnumerateArray().Select(el =>
+                {
+                    Enum.TryParse<BetType>(el.GetProperty("betType").GetString(), out var bt);
+                    return new AccumulatorLegResponseDTO
+                    {
+                        BetType     = bt,
+                        Description = el.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "",
+                        Odds        = el.TryGetProperty("odds", out var o) ? o.GetDecimal() : 0
+                    };
+                }).ToList();
+            }
+            catch { return []; }
+        }
+
+        private static BetResponseDTO ToAccumulatorDTO(Bet bet, Match match, List<AccumulatorLegResponseDTO> legs) => new()
+        {
+            Id               = bet.Id,
+            MatchId          = bet.MatchId,
+            HomeTeam         = match.HomeTeam.Name,
+            AwayTeam         = match.AwayTeam.Name,
+            MatchDate        = match.MatchDate,
+            BetType          = BetType.Accumulator,
+            BetDescription   = $"Accumulator ({legs.Count} legs)",
+            Amount           = bet.Amount,
+            OddsAtBetTime    = bet.OddsAtBetTime,
+            PotentialPayout  = bet.PotentialPayout,
+            Status           = bet.Status,
+            ActualPayout     = bet.ActualPayout,
+            CreatedAt        = bet.CreatedAt,
+            MaxPoints        = 3,
+            AccumulatorLegs  = legs
         };
 
         private static BetResponseDTO ToDTO(Bet bet, Match match, string desc, string? scorerName = null) => new()

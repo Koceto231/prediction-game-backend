@@ -4,7 +4,7 @@ namespace BPFL.API.Models
 {
     public enum BetStatus { Pending, Won, Lost, Void }
 
-    public enum BetType { Winner = 1, ExactScore = 2, BTTS = 3, OverUnder = 4, Goalscorer = 5, Corners = 6, YellowCards = 7, DoubleChance = 8 }
+    public enum BetType { Winner = 1, ExactScore = 2, BTTS = 3, OverUnder = 4, Goalscorer = 5, Corners = 6, YellowCards = 7, DoubleChance = 8, Accumulator = 9 }
 
     public class Bet
     {
@@ -38,6 +38,9 @@ namespace BPFL.API.Models
 
         // Double Chance pick
         public DoubleChancePick? DCPick { get; set; }
+
+        // Accumulator — stores serialised list of AccumulatorLegData as JSON
+        public string? AccumulatorLegsJson { get; set; }
 
         public decimal Amount { get; set; }
         public decimal OddsAtBetTime { get; set; }

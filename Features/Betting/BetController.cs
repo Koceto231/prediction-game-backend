@@ -32,6 +32,22 @@ namespace BPFL.API.Features.Betting
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         }
 
+        [HttpPost("accumulator")]
+        public async Task<IActionResult> PlaceAccumulator([FromBody] PlaceAccumulatorDTO dto, CancellationToken ct)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+
+            try
+            {
+                var result = await _betService.PlaceAccumulatorAsync(userId.Value, dto, ct);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)        { return BadRequest(new { message = ex.Message }); }
+            catch (InvalidOperationException ex){ return BadRequest(new { message = ex.Message }); }
+            catch (KeyNotFoundException ex)     { return NotFound(new { message = ex.Message }); }
+        }
+
         [HttpGet("me")]
         public async Task<IActionResult> GetMyBets(CancellationToken ct)
         {

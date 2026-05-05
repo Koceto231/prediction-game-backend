@@ -52,12 +52,56 @@ namespace BPFL.API.Features.Betting
         public int MaxPoints { get; set; }
         /// <summary>Goalscorer player name (when BetType == Goalscorer).</summary>
         public string? GoalscorerName { get; set; }
+
+        /// <summary>Populated when BetType == Accumulator.</summary>
+        public List<AccumulatorLegResponseDTO>? AccumulatorLegs { get; set; }
     }
 
     public class BetOddsDTO
     {
         public decimal Odds { get; set; }
         public string Description { get; set; } = null!;
+    }
+
+    // ── Accumulator ─────────────────────────────────────────────────────────────
+
+    /// <summary>One leg inside a multi-market accumulator bet.</summary>
+    public class AccumulatorLegDTO
+    {
+        public BetType BetType { get; set; }
+
+        // Winner / DC
+        public MatchWinner?       Pick   { get; set; }
+        public DoubleChancePick?  DCPick { get; set; }
+
+        // BTTS
+        public bool? BTTSPick { get; set; }
+
+        // Over/Under goals
+        public OverUnderLine? OULine  { get; set; }
+        public OverUnderPick? OUPick  { get; set; }
+
+        // Corners / Yellow Cards — numeric line + OUPick
+        public decimal?       LineValue { get; set; }
+
+        // Goalscorer
+        public int? GoalscorerId { get; set; }
+    }
+
+    /// <summary>Request body for POST /Bet/accumulator</summary>
+    public class PlaceAccumulatorDTO
+    {
+        public int MatchId { get; set; }
+        public decimal Amount { get; set; }
+        public List<AccumulatorLegDTO> Legs { get; set; } = [];
+    }
+
+    /// <summary>One resolved leg returned inside an accumulator response.</summary>
+    public class AccumulatorLegResponseDTO
+    {
+        public BetType  BetType     { get; set; }
+        public string   Description { get; set; } = null!;
+        public decimal  Odds        { get; set; }
     }
 
     /// <summary>Player entry returned by GET /api/Match/{matchId}/players</summary>
