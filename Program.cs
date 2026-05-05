@@ -166,9 +166,14 @@ builder.Services.AddScoped<ApiSportsPlayerSeedService>();
 builder.Services.AddHttpClient<SportmonksClient>();
 builder.Services.AddHttpClient<ApiSportsClient>();
 
+// ── News ──────────────────────────────────────────────────────────────────────
+builder.Services.AddScoped<NewsAgent>();
+builder.Services.AddScoped<NewsService>();
+
 // ── Background jobs ───────────────────────────────────────────────────────────
 builder.Services.AddHostedService<MatchSyncJob>();
 builder.Services.AddHostedService<PredictionScoringJob>();
+builder.Services.AddHostedService<NewsGenerationJob>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

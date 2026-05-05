@@ -8,5 +8,6 @@ global using BPFL.API.Features.Leagues;
 global using BPFL.API.Features.Profile;
 global using BPFL.API.Features.Wallet;
 global using BPFL.API.Features.Admin;
+global using BPFL.API.Features.News;
 global using BPFL.API.Shared;
 global using BPFL.API.Shared.External;
