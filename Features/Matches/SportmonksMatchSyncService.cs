@@ -154,10 +154,11 @@ namespace BPFL.API.Features.Matches
 
             if (existing != null)
             {
-                existing.HomeTeamId = homeTeam.Id;
-                existing.AwayTeamId = awayTeam.Id;
-                existing.MatchDate  = matchDate;
-                existing.Status     = status;
+                existing.HomeTeamId  = homeTeam.Id;
+                existing.AwayTeamId  = awayTeam.Id;
+                existing.MatchDate   = matchDate;
+                existing.Status      = status;
+                existing.LeagueCode  = _currentLeagueCode;
                 if (homeScore.HasValue) existing.HomeScore = homeScore;
                 if (awayScore.HasValue) existing.AwayScore = awayScore;
                 return (0, 1);
@@ -165,13 +166,14 @@ namespace BPFL.API.Features.Matches
 
             _db.Matches.Add(new Match
             {
-                ExternalId = fixture.Id,
-                HomeTeamId = homeTeam.Id,
-                AwayTeamId = awayTeam.Id,
-                MatchDate  = matchDate,
-                Status     = status,
-                HomeScore  = homeScore,
-                AwayScore  = awayScore,
+                ExternalId  = fixture.Id,
+                HomeTeamId  = homeTeam.Id,
+                AwayTeamId  = awayTeam.Id,
+                MatchDate   = matchDate,
+                Status      = status,
+                LeagueCode  = _currentLeagueCode,
+                HomeScore   = homeScore,
+                AwayScore   = awayScore,
             });
             return (1, 0);
         }

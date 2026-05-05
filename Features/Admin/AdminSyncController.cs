@@ -151,6 +151,76 @@ namespace BPFL.API.Features.Admin
             return Ok(new { total, hasPhoto, noPhoto = total - hasPhoto, sample });
         }
 
+        // ── Data cleanup ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Deletes upcoming matches where both teams are from different leagues
+        /// (cross-league phantom matches from UCL/EL sync contamination).
+        /// Only removes TIMED/future matches with no bets or predictions attached.
+        /// </summary>
+        [HttpDelete("matches/cleanup-phantom")]
+        public async Task<IActionResult> CleanupPhantomMatches(
+            [FromServices] IConfiguration configuration,
+            [FromQuery] bool dryRun = true,
+            CancellationToken ct = default)
+        {
+            var validCodes = configuration
+                .GetSection("BackgroundJobs:LeagueCodes")
+                .Get<List<string>>() ?? ["BGL", "PL", "BL1", "SA", "PD"];
+
+            var now = DateTime.UtcNow;
+
+            // Find matches where teams are from different leagues OR where the match
+            // has no LeagueCode and teams belong to leagues we don't track
+            var phantoms = await _db.Matches
+                .Include(m => m.HomeTeam)
+                .Include(m => m.AwayTeam)
+                .Where(m => m.MatchDate > now && m.Status != "FINISHED")
+                .ToListAsync(ct);
+
+            var toDelete = phantoms.Where(m =>
+            {
+                var homeCode = m.HomeTeam?.LeagueCode;
+                var awayCode = m.AwayTeam?.LeagueCode;
+
+                // Both teams must be in the same tracked league
+                if (homeCode == null || awayCode == null) return false;
+                if (!validCodes.Contains(homeCode, StringComparer.OrdinalIgnoreCase)) return true;
+                if (!validCodes.Contains(awayCode, StringComparer.OrdinalIgnoreCase)) return true;
+                return !homeCode.Equals(awayCode, StringComparison.OrdinalIgnoreCase);
+            }).ToList();
+
+            if (dryRun)
+                return Ok(new
+                {
+                    dryRun = true,
+                    count  = toDelete.Count,
+                    matches = toDelete.Select(m => new
+                    {
+                        m.Id,
+                        home      = m.HomeTeam?.Name,
+                        homeLeague = m.HomeTeam?.LeagueCode,
+                        away      = m.AwayTeam?.Name,
+                        awayLeague = m.AwayTeam?.LeagueCode,
+                        m.MatchDate
+                    })
+                });
+
+            // Only delete if no bets/predictions attached
+            var safeToDelete = new List<BPFL.API.Models.Match>();
+            foreach (var m in toDelete)
+            {
+                var hasBets  = await _db.Bets.AnyAsync(b => b.MatchId == m.Id, ct);
+                var hasPreds = await _db.Predictions.AnyAsync(p => p.MatchId == m.Id, ct);
+                if (!hasBets && !hasPreds) safeToDelete.Add(m);
+            }
+
+            _db.Matches.RemoveRange(safeToDelete);
+            await _db.SaveChangesAsync(ct);
+
+            return Ok(new { deleted = safeToDelete.Count, skipped = toDelete.Count - safeToDelete.Count });
+        }
+
         // ── Scoring ───────────────────────────────────────────────────
 
         [HttpPost("score/predictions/{matchId}")]

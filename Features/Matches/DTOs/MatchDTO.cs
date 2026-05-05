@@ -18,5 +18,7 @@ namespace BPFL.API.Features.Matches
         public decimal? HomeOdds { get; set; }
         public decimal? DrawOdds { get; set; }
         public decimal? AwayOdds { get; set; }
+
+        public string? LeagueCode { get; set; }
     }
 }

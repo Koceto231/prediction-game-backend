@@ -2,6 +2,7 @@ using BPFL.API.Data;
 using BPFL.API.Models;
 using BPFL.API.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace BPFL.API.Features.Matches
 {
@@ -18,18 +19,25 @@ namespace BPFL.API.Features.Matches
 
     public class MatchService
     {
-        private readonly BPFL_DBContext bPFL_DBContext;
-        private readonly OddsService oddsService;
-        private readonly IAppCache _cache;
+        private readonly BPFL_DBContext  bPFL_DBContext;
+        private readonly OddsService     oddsService;
+        private readonly IAppCache       _cache;
+        private readonly HashSet<string> _validLeagueCodes;
 
         private const string UpcomingCacheKey = "matches:upcoming";
         private static readonly TimeSpan UpcomingTtl = TimeSpan.FromMinutes(1);
 
-        public MatchService(BPFL_DBContext _bPFL_DBContext, OddsService _oddsService, IAppCache cache)
+        public MatchService(BPFL_DBContext _bPFL_DBContext, OddsService _oddsService,
+                            IAppCache cache, IConfiguration configuration)
         {
             bPFL_DBContext = _bPFL_DBContext;
-            oddsService    = _oddsService;
-            _cache         = cache;
+            oddsService   = _oddsService;
+            _cache        = cache;
+
+            var codes = configuration
+                .GetSection("BackgroundJobs:LeagueCodes")
+                .Get<List<string>>() ?? ["BGL", "PL", "BL1", "SA", "PD"];
+            _validLeagueCodes = new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase);
         }
 
         public async Task<PagedResult<MatchDto>> GetAllAsync(int page = 1, int pageSize = 20, CancellationToken ct = default)
@@ -79,8 +87,18 @@ namespace BPFL.API.Features.Matches
 
             await oddsService.EnsureOddsForUpcomingMatchesAsync(ct);
 
+            var validCodes = _validLeagueCodes.ToList();
+
             var result = await GetMatches()
-                .Where(m => m.MatchDate >= DateTime.UtcNow && m.Status != "FINISHED")
+                .Where(m => m.MatchDate >= DateTime.UtcNow &&
+                            m.Status != "FINISHED" &&
+                            (m.LeagueCode != null
+                                ? validCodes.Contains(m.LeagueCode)
+                                // Fallback for older rows without LeagueCode:
+                                // both teams must be from the same known league
+                                : bPFL_DBContext.Teams.Any(t => t.Id == m.HomeTeamId && t.LeagueCode != null &&
+                                  validCodes.Contains(t.LeagueCode) &&
+                                  bPFL_DBContext.Teams.Any(t2 => t2.Id == m.AwayTeamId && t2.LeagueCode == t.LeagueCode))))
                 .OrderBy(m => m.MatchDate)
                 .Take(take)
                 .ToListAsync(ct);
@@ -108,7 +126,8 @@ namespace BPFL.API.Features.Matches
                 AwayScore    = m.AwayScore,
                 HomeOdds     = m.HomeOdds,
                 DrawOdds     = m.DrawOdds,
-                AwayOdds     = m.AwayOdds
+                AwayOdds     = m.AwayOdds,
+                LeagueCode   = m.LeagueCode
             });
         }
     }

@@ -26,6 +26,9 @@ namespace BPFL.API.Models
 
         public string Status { get; set; } = null!;
 
+        /// <summary>League code this match belongs to (BGL, PL, BL1, SA, PD). Set during sync.</summary>
+        public string? LeagueCode { get; set; }
+
         public decimal? HomeOdds { get; set; }
         public decimal? DrawOdds { get; set; }
         public decimal? AwayOdds { get; set; }
