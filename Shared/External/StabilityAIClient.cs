@@ -5,7 +5,7 @@ namespace BPFL.API.Shared.External
 {
     /// <summary>
     /// Calls Stability AI's stable-image/generate/core endpoint.
-    /// Returns raw PNG bytes, or null on failure.
+    /// Returns raw PNG bytes, or throws on API error.
     /// </summary>
     public class StabilityAIClient
     {
@@ -18,69 +18,54 @@ namespace BPFL.API.Shared.External
             _logger = logger;
         }
 
-        /// <summary>Generate an image and return PNG bytes, or null on failure.</summary>
+        /// <summary>Generate an image and return PNG bytes, or throws on failure.</summary>
         public async Task<byte[]?> GenerateImageAsync(
             string prompt,
             string aspectRatio = "16:9",
             CancellationToken ct = default)
         {
-            try
+            // Build multipart body manually.
+            // .NET's MultipartFormDataContent wraps field names in escaped quotes
+            // (name=\"prompt\") which Stability AI's parser rejects with "missing a name".
+            // Raw string construction guarantees:  Content-Disposition: form-data; name="prompt"
+            var boundary = "----SAIBoundary" + Guid.NewGuid().ToString("N")[..16];
+
+            var sb = new StringBuilder();
+            void AppendField(string name, string value)
             {
-                using var form = new MultipartFormDataContent();
-
-                // Use Add(content) — NOT Add(content, name).
-                // The two-arg overload wraps the name in escaped quotes ("\"prompt\"")
-                // which Stability AI's parser rejects. We pre-set Content-Disposition
-                // ourselves with a plain unquoted name so the header reads:
-                //   Content-Disposition: form-data; name=prompt
-                form.Add(MakePart("prompt",        prompt));
-                form.Add(MakePart("aspect_ratio",  aspectRatio));
-                form.Add(MakePart("output_format", "png"));
-
-                using var request = new HttpRequestMessage(
-                    HttpMethod.Post,
-                    "https://api.stability.ai/v2beta/stable-image/generate/core");
-
-                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
-                request.Content = form;
-
-                var response = await _http.SendAsync(request, ct);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    var err = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogError("Stability AI {Code}: {Err}", (int)response.StatusCode, err);
-                    // Throw so the caller can surface the exact error (e.g. in backfill response)
-                    throw new HttpRequestException(
-                        $"Stability AI {(int)response.StatusCode}: {err}");
-                }
-
-                var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-                _logger.LogInformation("Stability AI returned {Bytes} bytes.", bytes.Length);
-                return bytes;
+                sb.Append($"--{boundary}\r\n");
+                sb.Append($"Content-Disposition: form-data; name=\"{name}\"\r\n\r\n");
+                sb.Append($"{value}\r\n");
             }
-            catch (HttpRequestException)
+
+            AppendField("prompt",        prompt);
+            AppendField("aspect_ratio",  aspectRatio);
+            AppendField("output_format", "png");
+            sb.Append($"--{boundary}--\r\n");
+
+            var bodyBytes = Encoding.UTF8.GetBytes(sb.ToString());
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                "https://api.stability.ai/v2beta/stable-image/generate/core");
+
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
+            request.Content = new ByteArrayContent(bodyBytes);
+            request.Content.Headers.ContentType =
+                MediaTypeHeaderValue.Parse($"multipart/form-data; boundary={boundary}");
+
+            var response = await _http.SendAsync(request, ct);
+
+            if (!response.IsSuccessStatusCode)
             {
-                throw; // propagate Stability AI errors up the stack
+                var err = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogError("Stability AI {Code}: {Err}", (int)response.StatusCode, err);
+                throw new HttpRequestException($"Stability AI {(int)response.StatusCode}: {err}");
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "StabilityAIClient.GenerateImageAsync failed.");
-                throw new Exception($"StabilityAI request failed: {ex.Message}", ex);
-            }
-        }
 
-        /// <summary>
-        /// Builds a form part whose Content-Disposition already has the field name set
-        /// without extra quoting, so Stability AI can parse it correctly.
-        /// </summary>
-        private static HttpContent MakePart(string fieldName, string value)
-        {
-            var content = new ByteArrayContent(Encoding.UTF8.GetBytes(value));
-            content.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data");
-            // Assign directly — avoids the double-quote wrapping that StringContent adds
-            content.Headers.ContentDisposition.Name = fieldName;
-            return content;
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+            _logger.LogInformation("Stability AI returned {Bytes} bytes.", bytes.Length);
+            return bytes;
         }
     }
 }
