@@ -170,7 +170,7 @@ builder.Services.AddHttpClient<ApiSportsClient>();
 // Pollinations.AI — free image generation, no API key needed
 builder.Services.AddHttpClient<StabilityAIClient>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(60);
+    client.Timeout = TimeSpan.FromSeconds(120);
 });
 builder.Services.AddSingleton<CloudinaryUploader>();
 builder.Services.AddScoped<NewsAgent>();

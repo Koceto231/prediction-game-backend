@@ -86,15 +86,12 @@ namespace BPFL.API.Features.News
         {
             var imagePrompt = BuildImagePrompt(type, match, leagueCode);
 
-            // Throws HttpRequestException with the exact API error if Stability AI fails
+            // Both throw on failure — exceptions bubble up to BackfillImagesAsync
             var bytes = await _stabilityAI.GenerateImageAsync(imagePrompt, "16:9", ct);
-            if (bytes == null || bytes.Length == 0) return null;
+            if (bytes == null || bytes.Length == 0)
+                throw new Exception("Image generator returned empty bytes.");
 
-            var url = await _cloudinary.UploadAsync(bytes, publicId, ct);
-            if (url == null)
-                throw new Exception("Cloudinary upload returned null — check CloudName/ApiKey/ApiSecret in Render.");
-
-            return url;
+            return await _cloudinary.UploadAsync(bytes, publicId, ct);
         }
 
         private static string BuildImagePrompt(NewsType type, Match? match, string? leagueCode)

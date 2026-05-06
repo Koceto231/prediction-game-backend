@@ -167,7 +167,8 @@ namespace BPFL.API.Features.News
                             "GenerateCoverImageAsync returned null — check Stability AI / Cloudinary keys in Render logs."));
                     }
 
-                    await Task.Delay(2000, ct);
+                    // Pollinations free tier: 1 request/IP at a time — wait between calls
+                    await Task.Delay(15_000, ct);
                 }
                 catch (Exception ex)
                 {

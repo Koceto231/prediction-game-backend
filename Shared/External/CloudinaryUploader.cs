@@ -45,16 +45,24 @@ namespace BPFL.API.Shared.External
 
                 if (result.Error != null)
                 {
-                    _logger.LogWarning("Cloudinary upload error: {Msg}", result.Error.Message);
-                    return null;
+                    _logger.LogError("Cloudinary upload error: {Msg}", result.Error.Message);
+                    throw new Exception($"Cloudinary: {result.Error.Message}");
                 }
 
-                return result.SecureUrl?.ToString();
+                var url = result.SecureUrl?.ToString();
+                if (string.IsNullOrEmpty(url))
+                    throw new Exception("Cloudinary returned no URL.");
+
+                return url;
+            }
+            catch (Exception ex) when (ex.Message.StartsWith("Cloudinary"))
+            {
+                throw; // already formatted, propagate as-is
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "CloudinaryUploader.UploadAsync failed for {PublicId}", publicId);
-                return null;
+                _logger.LogError(ex, "CloudinaryUploader.UploadAsync failed for {PublicId}", publicId);
+                throw new Exception($"Cloudinary exception: {ex.Message}", ex);
             }
         }
     }
