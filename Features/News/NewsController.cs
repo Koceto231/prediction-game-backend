@@ -77,5 +77,14 @@ namespace BPFL.API.Features.News
             }
             catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
         }
+
+        /// <summary>POST /api/News/backfill-images  [Admin only] — generates images for articles that have none</summary>
+        [HttpPost("backfill-images")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> BackfillImages(CancellationToken ct)
+        {
+            var count = await _newsService.BackfillImagesAsync(ct);
+            return Ok(new { message = $"Images generated for {count} article(s)." });
+        }
     }
 }

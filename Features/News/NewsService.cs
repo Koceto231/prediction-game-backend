@@ -120,6 +120,58 @@ namespace BPFL.API.Features.News
             }, ct);
         }
 
+        // ── Backfill images ───────────────────────────────────────────
+
+        /// <summary>
+        /// Generates cover images for all articles that currently have ImageUrl == null.
+        /// Returns the number of articles updated.
+        /// </summary>
+        public async Task<int> BackfillImagesAsync(CancellationToken ct = default)
+        {
+            var articles = await _db.NewsArticles
+                .Include(n => n.Match).ThenInclude(m => m!.HomeTeam)
+                .Include(n => n.Match).ThenInclude(m => m!.AwayTeam)
+                .Where(n => n.ImageUrl == null)
+                .ToListAsync(ct);
+
+            int updated = 0;
+            foreach (var article in articles)
+            {
+                try
+                {
+                    var publicId = article.Type switch
+                    {
+                        NewsType.MatchPreview  => $"preview-{article.MatchId}-{article.GeneratedAt:yyyyMMddHHmm}",
+                        NewsType.MatchReport   => $"report-{article.MatchId}-{article.GeneratedAt:yyyyMMddHHmm}",
+                        NewsType.LeagueSummary => $"summary-{article.LeagueCode}-{article.GeneratedAt:yyyyMMdd}",
+                        _                      => $"news-{article.Id}"
+                    };
+
+                    var url = await _agent.GenerateCoverImageAsync(
+                        article.Type, article.Match, article.LeagueCode, publicId, ct);
+
+                    if (url != null)
+                    {
+                        article.ImageUrl = url;
+                        updated++;
+                    }
+
+                    // Small delay to avoid hammering Stability AI
+                    await Task.Delay(2000, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Backfill image failed for article {Id}", article.Id);
+                }
+            }
+
+            if (updated > 0)
+                await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation("Image backfill complete: {Count}/{Total} articles updated.", updated, articles.Count);
+            return updated;
+        }
+
         // ── Read ──────────────────────────────────────────────────────
 
         public async Task<List<NewsArticleDTO>> GetLatestAsync(
