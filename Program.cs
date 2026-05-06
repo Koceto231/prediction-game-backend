@@ -167,11 +167,9 @@ builder.Services.AddHttpClient<SportmonksClient>();
 builder.Services.AddHttpClient<ApiSportsClient>();
 
 // ── News ──────────────────────────────────────────────────────────────────────
-builder.Services.AddHttpClient<StabilityAIClient>((sp, client) =>
+// Pollinations.AI — free image generation, no API key needed
+builder.Services.AddHttpClient<StabilityAIClient>(client =>
 {
-    var key = sp.GetRequiredService<IConfiguration>()["StabilityAI:ApiKey"] ?? "";
-    client.DefaultRequestHeaders.Authorization =
-        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 builder.Services.AddSingleton<CloudinaryUploader>();
