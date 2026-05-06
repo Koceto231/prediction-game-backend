@@ -77,7 +77,8 @@ namespace BPFL.API.Features.News
 
         /// <summary>
         /// Generates a cover image via Stability AI and uploads to Cloudinary.
-        /// Returns a permanent URL, or null if either step fails.
+        /// Returns a permanent URL, or null if Cloudinary upload fails.
+        /// Throws if Stability AI returns an error (so callers can surface the message).
         /// </summary>
         public async Task<string?> GenerateCoverImageAsync(
             NewsType type, Match? match, string? leagueCode,
@@ -85,10 +86,15 @@ namespace BPFL.API.Features.News
         {
             var imagePrompt = BuildImagePrompt(type, match, leagueCode);
 
+            // Throws HttpRequestException with the exact API error if Stability AI fails
             var bytes = await _stabilityAI.GenerateImageAsync(imagePrompt, "16:9", ct);
             if (bytes == null || bytes.Length == 0) return null;
 
-            return await _cloudinary.UploadAsync(bytes, publicId, ct);
+            var url = await _cloudinary.UploadAsync(bytes, publicId, ct);
+            if (url == null)
+                throw new Exception("Cloudinary upload returned null — check CloudName/ApiKey/ApiSecret in Render.");
+
+            return url;
         }
 
         private static string BuildImagePrompt(NewsType type, Match? match, string? leagueCode)

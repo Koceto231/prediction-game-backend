@@ -50,17 +50,23 @@ namespace BPFL.API.Shared.External
                 {
                     var err = await response.Content.ReadAsStringAsync(ct);
                     _logger.LogError("Stability AI {Code}: {Err}", (int)response.StatusCode, err);
-                    return null;
+                    // Throw so the caller can surface the exact error (e.g. in backfill response)
+                    throw new HttpRequestException(
+                        $"Stability AI {(int)response.StatusCode}: {err}");
                 }
 
                 var bytes = await response.Content.ReadAsByteArrayAsync(ct);
                 _logger.LogInformation("Stability AI returned {Bytes} bytes.", bytes.Length);
                 return bytes;
             }
+            catch (HttpRequestException)
+            {
+                throw; // propagate Stability AI errors up the stack
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "StabilityAIClient.GenerateImageAsync failed.");
-                return null;
+                throw new Exception($"StabilityAI request failed: {ex.Message}", ex);
             }
         }
 
