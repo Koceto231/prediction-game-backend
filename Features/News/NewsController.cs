@@ -83,8 +83,8 @@ namespace BPFL.API.Features.News
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> BackfillImages(CancellationToken ct)
         {
-            var count = await _newsService.BackfillImagesAsync(ct);
-            return Ok(new { message = $"Images generated for {count} article(s)." });
+            var result = await _newsService.BackfillImagesAsync(ct);
+            return Ok(result);
         }
     }
 }

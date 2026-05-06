@@ -122,11 +122,14 @@ namespace BPFL.API.Features.News
 
         // ── Backfill images ───────────────────────────────────────────
 
+        public record BackfillResult(int Updated, int Total, List<BackfillItem> Items);
+        public record BackfillItem(int Id, string Title, bool Ok, string Detail);
+
         /// <summary>
         /// Generates cover images for all articles that currently have ImageUrl == null.
-        /// Returns the number of articles updated.
+        /// Returns a detailed result so the caller can diagnose failures.
         /// </summary>
-        public async Task<int> BackfillImagesAsync(CancellationToken ct = default)
+        public async Task<BackfillResult> BackfillImagesAsync(CancellationToken ct = default)
         {
             var articles = await _db.NewsArticles
                 .Include(n => n.Match).ThenInclude(m => m!.HomeTeam)
@@ -134,7 +137,9 @@ namespace BPFL.API.Features.News
                 .Where(n => n.ImageUrl == null)
                 .ToListAsync(ct);
 
+            var items   = new List<BackfillItem>();
             int updated = 0;
+
             foreach (var article in articles)
             {
                 try
@@ -154,14 +159,20 @@ namespace BPFL.API.Features.News
                     {
                         article.ImageUrl = url;
                         updated++;
+                        items.Add(new BackfillItem(article.Id, article.Title, true, url));
+                    }
+                    else
+                    {
+                        items.Add(new BackfillItem(article.Id, article.Title, false,
+                            "GenerateCoverImageAsync returned null — check Stability AI / Cloudinary keys in Render logs."));
                     }
 
-                    // Small delay to avoid hammering Stability AI
                     await Task.Delay(2000, ct);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Backfill image failed for article {Id}", article.Id);
+                    items.Add(new BackfillItem(article.Id, article.Title, false, ex.Message));
                 }
             }
 
@@ -169,7 +180,7 @@ namespace BPFL.API.Features.News
                 await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation("Image backfill complete: {Count}/{Total} articles updated.", updated, articles.Count);
-            return updated;
+            return new BackfillResult(updated, articles.Count, items);
         }
 
         // ── Read ──────────────────────────────────────────────────────

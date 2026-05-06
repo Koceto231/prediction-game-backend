@@ -49,11 +49,13 @@ namespace BPFL.API.Shared.External
                 if (!response.IsSuccessStatusCode)
                 {
                     var err = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning("Stability AI error {Code}: {Err}", response.StatusCode, err);
+                    _logger.LogError("Stability AI {Code}: {Err}", (int)response.StatusCode, err);
                     return null;
                 }
 
-                return await response.Content.ReadAsByteArrayAsync(ct);
+                var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+                _logger.LogInformation("Stability AI returned {Bytes} bytes.", bytes.Length);
+                return bytes;
             }
             catch (Exception ex)
             {
