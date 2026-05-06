@@ -99,65 +99,67 @@ namespace BPFL.API.Features.News
             var home = match?.HomeTeam?.Name ?? "";
             var away = match?.AwayTeam?.Name ?? "";
 
-            // Shared negative guidance to steer away from American football
-            const string style = "European soccer, round ball, soccer players in jerseys and shorts, " +
-                                  "green grass pitch, photorealistic, cinematic 16:9, " +
-                                  "NOT american football, NOT rugby, NOT helmet, NOT oval ball";
+            // Crystal-clear visual anchors so the AI renders association football, not gridiron
+            const string style = "association football, round white ball, players in shorts and football jerseys, " +
+                                  "green grass pitch with white lines and goalposts, no helmets no padding, " +
+                                  "photorealistic, cinematic 16:9";
 
             return type switch
             {
                 NewsType.MatchPreview =>
-                    $"European soccer match preview poster, {home} vs {away}, " +
-                    "two teams facing each other on a floodlit green grass pitch, packed stadium crowd, " +
-                    $"tense dramatic atmosphere before kickoff, dark moody cinematic lighting, {style}",
+                    $"Association football match preview, {home} versus {away}, " +
+                    "eleven players in coloured jerseys facing each other on a green grass pitch, " +
+                    "packed stadium under floodlights, round white ball on the centre spot, " +
+                    $"tense atmosphere before kickoff, dark moody cinematic lighting, {style}",
 
                 NewsType.MatchReport when match?.HomeScore > match?.AwayScore =>
-                    $"European soccer victory celebration, {home} players hugging and cheering on green pitch, " +
-                    "fans going wild in packed stadium stands, confetti, golden hour lighting, " +
-                    $"wide angle shot, {style}",
+                    $"Association football victory celebration, {home} players in jerseys hugging and " +
+                    "raising fists on a green grass pitch, fans in the stands erupting with joy, " +
+                    $"confetti falling, dramatic floodlight photography, wide angle shot, {style}",
 
                 NewsType.MatchReport when match?.AwayScore > match?.HomeScore =>
-                    $"European soccer away victory, {away} players celebrating on the pitch, " +
-                    "away fans section erupting in joy, stadium atmosphere at full time, " +
-                    $"dramatic floodlight photography, {style}",
+                    $"Association football away victory, {away} players in jerseys celebrating on the pitch, " +
+                    "round ball on the grass, away fans section cheering, stadium at full time, " +
+                    $"dramatic lighting, {style}",
 
                 NewsType.MatchReport =>
-                    "European soccer match ends in a draw, players from both teams shaking hands " +
-                    "and exchanging jerseys on green grass pitch, respectful atmosphere at full time, " +
-                    $"stadium lights, wide angle, {style}",
+                    "Association football match ends in a draw, players in jerseys and shorts shaking hands " +
+                    "on a green grass pitch with white markings, goalposts visible, stadium lights, " +
+                    $"respectful atmosphere at full time, wide angle, {style}",
 
                 NewsType.LeagueSummary when leagueCode == "PL" =>
-                    "English Premier League weekly highlights, iconic green soccer pitch, " +
-                    "packed English stadium, dramatic floodlit evening match, soccer ball mid-flight, " +
-                    $"vibrant colors, {style}",
+                    "English Premier League football highlights, iconic green pitch with white lines, " +
+                    "packed English stadium under floodlights, round white ball in motion, " +
+                    $"players in coloured jerseys and shorts, dramatic evening atmosphere, {style}",
 
                 NewsType.LeagueSummary when leagueCode == "BL1" =>
-                    "German Bundesliga weekly highlights, modern soccer stadium, green pitch, " +
-                    "passionate crowd with yellow and black scarves, dramatic evening light, " +
-                    $"soccer ball action, {style}",
+                    "German Bundesliga football highlights, modern stadium, green pitch, " +
+                    "passionate crowd with scarves, round ball action near the goal, " +
+                    $"players in jerseys and shorts, dramatic evening light, {style}",
 
                 NewsType.LeagueSummary when leagueCode == "SA" =>
-                    "Italian Serie A weekly highlights, classic European soccer stadium, green pitch, " +
-                    "passionate Italian fans with colorful tifos, dramatic lighting, " +
-                    $"soccer action photography, {style}",
+                    "Italian Serie A football highlights, classic European stadium, green pitch, " +
+                    "passionate fans with colourful tifos in the stands, round ball action, " +
+                    $"players in jerseys and shorts, dramatic floodlit photography, {style}",
 
                 NewsType.LeagueSummary when leagueCode == "PD" =>
-                    "Spanish La Liga weekly highlights, sunny Mediterranean soccer stadium, green pitch, " +
-                    "passionate crowd, dramatic action shot, soccer ball in motion, " +
-                    $"vibrant colors, {style}",
+                    "Spanish La Liga football highlights, Mediterranean stadium, sunny green pitch, " +
+                    "passionate crowd, round ball mid-flight near goal, " +
+                    $"players in jerseys and shorts, vibrant colours, {style}",
 
                 NewsType.LeagueSummary when leagueCode == "BGL" =>
-                    "Bulgarian soccer league weekly highlights, Eastern European stadium, green pitch, " +
-                    "passionate local fans, dramatic evening floodlights, soccer ball action, " +
-                    $"{style}",
+                    "Bulgarian football league highlights, Eastern European stadium, green grass pitch, " +
+                    "passionate local fans, round white ball in action under floodlights, " +
+                    $"players in jerseys and shorts, {style}",
 
                 NewsType.LeagueSummary =>
-                    $"European soccer league {leagueCode ?? "championship"} weekly highlights, " +
-                    "green grass pitch, packed stadium, soccer ball in motion, floodlit evening, " +
-                    $"dramatic sports photography, {style}",
+                    $"European football league {leagueCode ?? "championship"} weekly highlights, " +
+                    "green grass pitch with white lines and goalposts, packed stadium, " +
+                    $"round white ball in motion, players in jerseys and shorts, floodlit evening, {style}",
 
                 _ =>
-                    $"European soccer match, green grass pitch, stadium crowd, dramatic lighting, {style}"
+                    $"Association football match, green grass pitch, round white ball, " +
+                    $"players in jerseys and shorts, stadium crowd, dramatic floodlights, {style}"
             };
         }
 
