@@ -32,6 +32,17 @@ namespace BPFL.API.Features.News
             - Be factual, use the provided data
             """;
 
+        private const string ImagePromptSystem = """
+            You are an expert at writing image generation prompts for AI art models (Stable Diffusion).
+            Given a football news article, write ONE concise image generation prompt in English (max 80 words).
+
+            Rules:
+            - Always include: association football, round white ball, green grass pitch, players in jerseys and shorts, photorealistic, cinematic 16:9
+            - Describe a specific vivid scene that matches the article theme
+            - Include team names and match context when relevant
+            - No markdown, no explanations — output the prompt text only
+            """;
+
         public NewsAgent(
             OpenRouterClient   openRouter,
             BPFL_DBContext     db,
@@ -77,14 +88,17 @@ namespace BPFL.API.Features.News
 
         /// <summary>
         /// Generates a cover image via Stability AI and uploads to Cloudinary.
-        /// Returns a permanent URL, or null if Cloudinary upload fails.
-        /// Throws if Stability AI returns an error (so callers can surface the message).
+        /// Uses the article title+body to ask OpenRouter for a context-aware image prompt.
+        /// Falls back to a rule-based prompt if OpenRouter fails.
         /// </summary>
         public async Task<string?> GenerateCoverImageAsync(
             NewsType type, Match? match, string? leagueCode,
-            string publicId, CancellationToken ct = default)
+            string publicId,
+            string? articleTitle = null, string? articleBody = null,
+            CancellationToken ct = default)
         {
-            var imagePrompt = BuildImagePrompt(type, match, leagueCode);
+            var imagePrompt = await BuildContextualImagePromptAsync(
+                type, match, leagueCode, articleTitle, articleBody, ct);
 
             // Both throw on failure — exceptions bubble up to BackfillImagesAsync
             var bytes = await _stabilityAI.GenerateImageAsync(imagePrompt, "16:9", ct);
@@ -92,6 +106,35 @@ namespace BPFL.API.Features.News
                 throw new Exception("Image generator returned empty bytes.");
 
             return await _cloudinary.UploadAsync(bytes, publicId, ct);
+        }
+
+        private async Task<string> BuildContextualImagePromptAsync(
+            NewsType type, Match? match, string? leagueCode,
+            string? title, string? body, CancellationToken ct)
+        {
+            // If we have article text, ask OpenRouter to craft a specific prompt
+            if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(body))
+            {
+                try
+                {
+                    var snippet  = body.Length > 300 ? body[..300] : body;
+                    var userMsg  = $"Article title: {title}\n\nArticle excerpt: {snippet}";
+                    var aiPrompt = await _openRouter.CompleteAsync(ImagePromptSystem, userMsg, ct);
+
+                    if (!string.IsNullOrWhiteSpace(aiPrompt))
+                    {
+                        _logger.LogInformation("AI image prompt: {Prompt}", aiPrompt[..Math.Min(100, aiPrompt.Length)]);
+                        return aiPrompt.Trim();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "OpenRouter image prompt generation failed, using fallback.");
+                }
+            }
+
+            // Fallback: rule-based prompt from match/league data
+            return BuildImagePrompt(type, match, leagueCode);
         }
 
         private static string BuildImagePrompt(NewsType type, Match? match, string? leagueCode)

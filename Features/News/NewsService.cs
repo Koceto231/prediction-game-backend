@@ -40,7 +40,8 @@ namespace BPFL.API.Features.News
 
             var imageUrl = await _agent.GenerateCoverImageAsync(
                 NewsType.MatchPreview, match, null,
-                $"preview-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}", ct);
+                $"preview-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}",
+                result.Value.Title, result.Value.Body, ct);
 
             return await SaveAsync(new NewsArticle
             {
@@ -75,7 +76,8 @@ namespace BPFL.API.Features.News
 
             var imageUrl = await _agent.GenerateCoverImageAsync(
                 NewsType.MatchReport, match, null,
-                $"report-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}", ct);
+                $"report-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}",
+                result.Value.Title, result.Value.Body, ct);
 
             return await SaveAsync(new NewsArticle
             {
@@ -108,7 +110,8 @@ namespace BPFL.API.Features.News
 
             var imageUrl = await _agent.GenerateCoverImageAsync(
                 NewsType.LeagueSummary, null, leagueCode,
-                $"summary-{leagueCode}-{DateTime.UtcNow:yyyyMMdd}", ct);
+                $"summary-{leagueCode}-{DateTime.UtcNow:yyyyMMdd}",
+                result.Value.Title, result.Value.Body, ct);
 
             return await SaveAsync(new NewsArticle
             {
@@ -153,7 +156,8 @@ namespace BPFL.API.Features.News
                     };
 
                     var url = await _agent.GenerateCoverImageAsync(
-                        article.Type, article.Match, article.LeagueCode, publicId, ct);
+                        article.Type, article.Match, article.LeagueCode, publicId,
+                        article.Title, article.Body, ct);
 
                     if (url != null)
                     {
