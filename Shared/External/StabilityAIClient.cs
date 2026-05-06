@@ -1,5 +1,5 @@
 using System.Net.Http.Headers;
-using System.Text.Json;
+using System.Text;
 
 namespace BPFL.API.Shared.External
 {
@@ -9,7 +9,7 @@ namespace BPFL.API.Shared.External
     /// </summary>
     public class StabilityAIClient
     {
-        private readonly HttpClient              _http;
+        private readonly HttpClient                 _http;
         private readonly ILogger<StabilityAIClient> _logger;
 
         public StabilityAIClient(HttpClient http, ILogger<StabilityAIClient> logger)
@@ -27,9 +27,15 @@ namespace BPFL.API.Shared.External
             try
             {
                 using var form = new MultipartFormDataContent();
-                form.Add(new StringContent(prompt),      "prompt");
-                form.Add(new StringContent(aspectRatio), "aspect_ratio");
-                form.Add(new StringContent("none"),      "output_format");   // PNG
+
+                // Use Add(content) — NOT Add(content, name).
+                // The two-arg overload wraps the name in escaped quotes ("\"prompt\"")
+                // which Stability AI's parser rejects. We pre-set Content-Disposition
+                // ourselves with a plain unquoted name so the header reads:
+                //   Content-Disposition: form-data; name=prompt
+                form.Add(MakePart("prompt",        prompt));
+                form.Add(MakePart("aspect_ratio",  aspectRatio));
+                form.Add(MakePart("output_format", "png"));
 
                 using var request = new HttpRequestMessage(
                     HttpMethod.Post,
@@ -54,6 +60,19 @@ namespace BPFL.API.Shared.External
                 _logger.LogWarning(ex, "StabilityAIClient.GenerateImageAsync failed.");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Builds a form part whose Content-Disposition already has the field name set
+        /// without extra quoting, so Stability AI can parse it correctly.
+        /// </summary>
+        private static HttpContent MakePart(string fieldName, string value)
+        {
+            var content = new ByteArrayContent(Encoding.UTF8.GetBytes(value));
+            content.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data");
+            // Assign directly — avoids the double-quote wrapping that StringContent adds
+            content.Headers.ContentDisposition.Name = fieldName;
+            return content;
         }
     }
 }
