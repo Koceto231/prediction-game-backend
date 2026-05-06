@@ -36,11 +36,9 @@ namespace BPFL.API.Shared.External
                 using var stream = new MemoryStream(imageBytes);
                 var uploadParams = new ImageUploadParams
                 {
-                    File          = new FileDescription(publicId, stream),
-                    PublicId      = $"bpfl-news/{publicId}",
-                    Overwrite     = true,
-                    Transformation = new Transformation()
-                        .Width(1280).Height(720).Crop("fill").Quality("auto")
+                    File      = new FileDescription(publicId, stream),
+                    PublicId  = $"bpfl-news/{publicId}",
+                    Overwrite = true,
                 };
 
                 var result = await _cloudinary.UploadAsync(uploadParams, ct);
