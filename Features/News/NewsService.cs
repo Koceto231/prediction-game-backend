@@ -126,15 +126,15 @@ namespace BPFL.API.Features.News
         public record BackfillItem(int Id, string Title, bool Ok, string Detail);
 
         /// <summary>
-        /// Generates cover images for all articles that currently have ImageUrl == null.
-        /// Returns a detailed result so the caller can diagnose failures.
+        /// Generates cover images for articles without one.
+        /// Pass force=true to regenerate even articles that already have an image.
         /// </summary>
-        public async Task<BackfillResult> BackfillImagesAsync(CancellationToken ct = default)
+        public async Task<BackfillResult> BackfillImagesAsync(bool force = false, CancellationToken ct = default)
         {
             var articles = await _db.NewsArticles
                 .Include(n => n.Match).ThenInclude(m => m!.HomeTeam)
                 .Include(n => n.Match).ThenInclude(m => m!.AwayTeam)
-                .Where(n => n.ImageUrl == null)
+                .Where(n => force || string.IsNullOrEmpty(n.ImageUrl))
                 .ToListAsync(ct);
 
             var items   = new List<BackfillItem>();

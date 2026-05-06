@@ -81,9 +81,10 @@ namespace BPFL.API.Features.News
         /// <summary>POST /api/News/backfill-images  [Admin only] — generates images for articles that have none</summary>
         [HttpPost("backfill-images")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> BackfillImages(CancellationToken ct)
+        public async Task<IActionResult> BackfillImages(
+            [FromQuery] bool force = false, CancellationToken ct = default)
         {
-            var result = await _newsService.BackfillImagesAsync(ct);
+            var result = await _newsService.BackfillImagesAsync(force, ct);
             return Ok(result);
         }
     }
