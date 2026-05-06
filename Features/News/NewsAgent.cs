@@ -99,30 +99,65 @@ namespace BPFL.API.Features.News
             var home = match?.HomeTeam?.Name ?? "";
             var away = match?.AwayTeam?.Name ?? "";
 
+            // Shared negative guidance to steer away from American football
+            const string style = "European soccer, round ball, soccer players in jerseys and shorts, " +
+                                  "green grass pitch, photorealistic, cinematic 16:9, " +
+                                  "NOT american football, NOT rugby, NOT helmet, NOT oval ball";
+
             return type switch
             {
-                NewsType.MatchPreview => $"Professional football match preview, {home} versus {away}, " +
-                    "packed stadium with dramatic floodlights, tense atmosphere before kickoff, " +
-                    "cinematic sports photography, dark moody tones, 16:9, photorealistic",
+                NewsType.MatchPreview =>
+                    $"European soccer match preview poster, {home} vs {away}, " +
+                    "two teams facing each other on a floodlit green grass pitch, packed stadium crowd, " +
+                    $"tense dramatic atmosphere before kickoff, dark moody cinematic lighting, {style}",
 
                 NewsType.MatchReport when match?.HomeScore > match?.AwayScore =>
-                    $"Football match celebration, {home} players celebrating victory on the pitch, " +
-                    "stadium erupting with joy, confetti, dramatic lighting, sports photography, photorealistic",
+                    $"European soccer victory celebration, {home} players hugging and cheering on green pitch, " +
+                    "fans going wild in packed stadium stands, confetti, golden hour lighting, " +
+                    $"wide angle shot, {style}",
 
                 NewsType.MatchReport when match?.AwayScore > match?.HomeScore =>
-                    $"Football match celebration, {away} players celebrating away victory, " +
-                    "stadium atmosphere, dramatic lighting, sports photography, photorealistic",
+                    $"European soccer away victory, {away} players celebrating on the pitch, " +
+                    "away fans section erupting in joy, stadium atmosphere at full time, " +
+                    $"dramatic floodlight photography, {style}",
 
                 NewsType.MatchReport =>
-                    "Football match ends in a draw, players shaking hands on pitch, " +
-                    "stadium atmosphere at full time, dramatic lighting, sports photography, photorealistic",
+                    "European soccer match ends in a draw, players from both teams shaking hands " +
+                    "and exchanging jerseys on green grass pitch, respectful atmosphere at full time, " +
+                    $"stadium lights, wide angle, {style}",
+
+                NewsType.LeagueSummary when leagueCode == "PL" =>
+                    "English Premier League weekly highlights, iconic green soccer pitch, " +
+                    "packed English stadium, dramatic floodlit evening match, soccer ball mid-flight, " +
+                    $"vibrant colors, {style}",
+
+                NewsType.LeagueSummary when leagueCode == "BL1" =>
+                    "German Bundesliga weekly highlights, modern soccer stadium, green pitch, " +
+                    "passionate crowd with yellow and black scarves, dramatic evening light, " +
+                    $"soccer ball action, {style}",
+
+                NewsType.LeagueSummary when leagueCode == "SA" =>
+                    "Italian Serie A weekly highlights, classic European soccer stadium, green pitch, " +
+                    "passionate Italian fans with colorful tifos, dramatic lighting, " +
+                    $"soccer action photography, {style}",
+
+                NewsType.LeagueSummary when leagueCode == "PD" =>
+                    "Spanish La Liga weekly highlights, sunny Mediterranean soccer stadium, green pitch, " +
+                    "passionate crowd, dramatic action shot, soccer ball in motion, " +
+                    $"vibrant colors, {style}",
+
+                NewsType.LeagueSummary when leagueCode == "BGL" =>
+                    "Bulgarian soccer league weekly highlights, Eastern European stadium, green pitch, " +
+                    "passionate local fans, dramatic evening floodlights, soccer ball action, " +
+                    $"{style}",
 
                 NewsType.LeagueSummary =>
-                    $"Football league {leagueCode ?? "championship"} weekly highlights, " +
-                    "trophy and stadium collage, dramatic sports montage, " +
-                    "professional sports photography, vibrant colors, photorealistic",
+                    $"European soccer league {leagueCode ?? "championship"} weekly highlights, " +
+                    "green grass pitch, packed stadium, soccer ball in motion, floodlit evening, " +
+                    $"dramatic sports photography, {style}",
 
-                _ => "Professional football match, stadium atmosphere, dramatic lighting, photorealistic"
+                _ =>
+                    $"European soccer match, green grass pitch, stadium crowd, dramatic lighting, {style}"
             };
         }
 
