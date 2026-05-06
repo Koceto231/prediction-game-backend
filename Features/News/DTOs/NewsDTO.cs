@@ -13,6 +13,7 @@ namespace BPFL.API.Features.News
         public string?   HomeTeam    { get; set; }
         public string?   AwayTeam    { get; set; }
         public string?   LeagueCode  { get; set; }
+        public string?   ImageUrl    { get; set; }
         public DateTime  GeneratedAt { get; set; }
     }
 }

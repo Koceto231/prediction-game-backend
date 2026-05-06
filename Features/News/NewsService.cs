@@ -38,12 +38,17 @@ namespace BPFL.API.Features.News
             var result = await _agent.GenerateMatchPreviewAsync(match, ct);
             if (result == null) return null;
 
+            var imageUrl = await _agent.GenerateCoverImageAsync(
+                NewsType.MatchPreview, match, null,
+                $"preview-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}", ct);
+
             return await SaveAsync(new NewsArticle
             {
-                Type    = NewsType.MatchPreview,
-                MatchId = matchId,
-                Title   = result.Value.Title,
-                Body    = result.Value.Body,
+                Type     = NewsType.MatchPreview,
+                MatchId  = matchId,
+                Title    = result.Value.Title,
+                Body     = result.Value.Body,
+                ImageUrl = imageUrl,
             }, ct);
         }
 
@@ -68,12 +73,17 @@ namespace BPFL.API.Features.News
             var result = await _agent.GenerateMatchReportAsync(match, ct);
             if (result == null) return null;
 
+            var imageUrl = await _agent.GenerateCoverImageAsync(
+                NewsType.MatchReport, match, null,
+                $"report-{matchId}-{DateTime.UtcNow:yyyyMMddHHmm}", ct);
+
             return await SaveAsync(new NewsArticle
             {
-                Type    = NewsType.MatchReport,
-                MatchId = matchId,
-                Title   = result.Value.Title,
-                Body    = result.Value.Body,
+                Type     = NewsType.MatchReport,
+                MatchId  = matchId,
+                Title    = result.Value.Title,
+                Body     = result.Value.Body,
+                ImageUrl = imageUrl,
             }, ct);
         }
 
@@ -96,12 +106,17 @@ namespace BPFL.API.Features.News
             var result = await _agent.GenerateLeagueSummaryAsync(leagueCode, ct);
             if (result == null) return null;
 
+            var imageUrl = await _agent.GenerateCoverImageAsync(
+                NewsType.LeagueSummary, null, leagueCode,
+                $"summary-{leagueCode}-{DateTime.UtcNow:yyyyMMdd}", ct);
+
             return await SaveAsync(new NewsArticle
             {
                 Type       = NewsType.LeagueSummary,
                 LeagueCode = leagueCode,
                 Title      = result.Value.Title,
                 Body       = result.Value.Body,
+                ImageUrl   = imageUrl,
             }, ct);
         }
 
@@ -176,6 +191,7 @@ namespace BPFL.API.Features.News
             HomeTeam    = a.Match?.HomeTeam?.Name,
             AwayTeam    = a.Match?.AwayTeam?.Name,
             LeagueCode  = a.LeagueCode,
+            ImageUrl    = a.ImageUrl,
             GeneratedAt = a.GeneratedAt,
         };
     }

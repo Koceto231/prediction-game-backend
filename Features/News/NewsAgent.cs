@@ -12,9 +12,11 @@ namespace BPFL.API.Features.News
     /// </summary>
     public class NewsAgent
     {
-        private readonly OpenRouterClient         _openRouter;
-        private readonly BPFL_DBContext           _db;
-        private readonly ILogger<NewsAgent>       _logger;
+        private readonly OpenRouterClient            _openRouter;
+        private readonly BPFL_DBContext              _db;
+        private readonly StabilityAIClient           _stabilityAI;
+        private readonly CloudinaryUploader          _cloudinary;
+        private readonly ILogger<NewsAgent>          _logger;
 
         private const string SystemPrompt = """
             You are a professional football journalist. Write concise, engaging football news articles.
@@ -30,11 +32,18 @@ namespace BPFL.API.Features.News
             - Be factual, use the provided data
             """;
 
-        public NewsAgent(OpenRouterClient openRouter, BPFL_DBContext db, ILogger<NewsAgent> logger)
+        public NewsAgent(
+            OpenRouterClient   openRouter,
+            BPFL_DBContext     db,
+            StabilityAIClient  stabilityAI,
+            CloudinaryUploader cloudinary,
+            ILogger<NewsAgent> logger)
         {
-            _openRouter = openRouter;
-            _db         = db;
-            _logger     = logger;
+            _openRouter  = openRouter;
+            _db          = db;
+            _stabilityAI = stabilityAI;
+            _cloudinary  = cloudinary;
+            _logger      = logger;
         }
 
         // ── Match Preview ────────────────────────────────────────────
@@ -62,6 +71,56 @@ namespace BPFL.API.Features.News
         {
             var prompt = await BuildLeagueSummaryPromptAsync(leagueCode, ct);
             return await CallAgentAsync(prompt, $"League summary {leagueCode}", ct);
+        }
+
+        // ── Image generation ─────────────────────────────────────────
+
+        /// <summary>
+        /// Generates a cover image via Stability AI and uploads to Cloudinary.
+        /// Returns a permanent URL, or null if either step fails.
+        /// </summary>
+        public async Task<string?> GenerateCoverImageAsync(
+            NewsType type, Match? match, string? leagueCode,
+            string publicId, CancellationToken ct = default)
+        {
+            var imagePrompt = BuildImagePrompt(type, match, leagueCode);
+
+            var bytes = await _stabilityAI.GenerateImageAsync(imagePrompt, "16:9", ct);
+            if (bytes == null || bytes.Length == 0) return null;
+
+            return await _cloudinary.UploadAsync(bytes, publicId, ct);
+        }
+
+        private static string BuildImagePrompt(NewsType type, Match? match, string? leagueCode)
+        {
+            var home = match?.HomeTeam?.Name ?? "";
+            var away = match?.AwayTeam?.Name ?? "";
+
+            return type switch
+            {
+                NewsType.MatchPreview => $"Professional football match preview, {home} versus {away}, " +
+                    "packed stadium with dramatic floodlights, tense atmosphere before kickoff, " +
+                    "cinematic sports photography, dark moody tones, 16:9, photorealistic",
+
+                NewsType.MatchReport when match?.HomeScore > match?.AwayScore =>
+                    $"Football match celebration, {home} players celebrating victory on the pitch, " +
+                    "stadium erupting with joy, confetti, dramatic lighting, sports photography, photorealistic",
+
+                NewsType.MatchReport when match?.AwayScore > match?.HomeScore =>
+                    $"Football match celebration, {away} players celebrating away victory, " +
+                    "stadium atmosphere, dramatic lighting, sports photography, photorealistic",
+
+                NewsType.MatchReport =>
+                    "Football match ends in a draw, players shaking hands on pitch, " +
+                    "stadium atmosphere at full time, dramatic lighting, sports photography, photorealistic",
+
+                NewsType.LeagueSummary =>
+                    $"Football league {leagueCode ?? "championship"} weekly highlights, " +
+                    "trophy and stadium collage, dramatic sports montage, " +
+                    "professional sports photography, vibrant colors, photorealistic",
+
+                _ => "Professional football match, stadium atmosphere, dramatic lighting, photorealistic"
+            };
         }
 
         // ── Prompt builders ──────────────────────────────────────────

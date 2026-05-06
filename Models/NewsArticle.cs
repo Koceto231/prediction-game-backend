@@ -16,6 +16,9 @@ namespace BPFL.API.Models
         /// <summary>Set for LeagueSummary (e.g. "BGL", "PL").</summary>
         public string?  LeagueCode  { get; set; }
 
+        /// <summary>Permanent Cloudinary URL for the AI-generated cover image.</summary>
+        public string?  ImageUrl    { get; set; }
+
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
     }
 }
