@@ -24,18 +24,17 @@ namespace BPFL.API.Shared.External
             string aspectRatio = "16:9",
             CancellationToken ct = default)
         {
-            // Build multipart body manually.
-            // .NET's MultipartFormDataContent wraps field names in escaped quotes
-            // (name=\"prompt\") which Stability AI's parser rejects with "missing a name".
-            // Raw string construction guarantees:  Content-Disposition: form-data; name="prompt"
-            var boundary = "----SAIBoundary" + Guid.NewGuid().ToString("N")[..16];
+            // Simple alphanumeric boundary — no dashes so nothing can interfere
+            var boundary = "sai" + Guid.NewGuid().ToString("N");
 
             var sb = new StringBuilder();
             void AppendField(string name, string value)
             {
                 sb.Append($"--{boundary}\r\n");
-                sb.Append($"Content-Disposition: form-data; name=\"{name}\"\r\n\r\n");
-                sb.Append($"{value}\r\n");
+                sb.Append($"Content-Disposition: form-data; name=\"{name}\"\r\n");
+                sb.Append("\r\n");
+                sb.Append(value);
+                sb.Append("\r\n");
             }
 
             AppendField("prompt",        prompt);
@@ -43,16 +42,24 @@ namespace BPFL.API.Shared.External
             AppendField("output_format", "png");
             sb.Append($"--{boundary}--\r\n");
 
-            var bodyBytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bodyStr   = sb.ToString();
+            var bodyBytes = Encoding.UTF8.GetBytes(bodyStr);
+
+            // Log first 400 chars so Render logs show exactly what we send
+            _logger.LogInformation("StabilityAI body preview:\n{Preview}",
+                bodyStr.Length > 400 ? bodyStr[..400] : bodyStr);
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
                 "https://api.stability.ai/v2beta/stable-image/generate/core");
 
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
-            request.Content = new ByteArrayContent(bodyBytes);
-            request.Content.Headers.ContentType =
-                MediaTypeHeaderValue.Parse($"multipart/form-data; boundary={boundary}");
+
+            var content = new ByteArrayContent(bodyBytes);
+            // Use TryAddWithoutValidation so .NET doesn't reformat the boundary value
+            content.Headers.TryAddWithoutValidation(
+                "Content-Type", $"multipart/form-data; boundary={boundary}");
+            request.Content = content;
 
             var response = await _http.SendAsync(request, ct);
 
