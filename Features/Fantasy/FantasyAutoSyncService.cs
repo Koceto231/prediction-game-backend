@@ -322,7 +322,8 @@ namespace BPFL.API.Features.Fantasy
 
         /// <summary>
         /// Create a FantasyGameweek for each distinct MatchDay that doesn't already have one.
-        /// Deadline = 1 hour before the first match in that matchday.
+        /// Each gameweek opens Friday 12:00 UTC, deadline Friday 19:00 UTC,
+        /// closes Tuesday 05:00 UTC — covering the full weekend + Monday fixtures.
         /// </summary>
         public async Task SyncGameweeksFromMatchdaysAsync(CancellationToken ct = default)
         {
@@ -332,15 +333,14 @@ namespace BPFL.API.Features.Fantasy
 
             var existingSet = new HashSet<int>(existingGameweeks);
 
-            // Group upcoming matches by matchday
             var matchdays = await _db.Matches.AsNoTracking()
                 .Where(m => m.MatchDay != null)
                 .GroupBy(m => m.MatchDay!.Value)
                 .Select(g => new
                 {
-                    MatchDay  = g.Key,
-                    StartDate = g.Min(m => m.MatchDate),
-                    EndDate   = g.Max(m => m.MatchDate),
+                    MatchDay       = g.Key,
+                    FirstMatchDate = g.Min(m => m.MatchDate),
+                    LastMatchDate  = g.Max(m => m.MatchDate),
                 })
                 .OrderBy(g => g.MatchDay)
                 .ToListAsync(ct);
@@ -350,14 +350,16 @@ namespace BPFL.API.Features.Fantasy
             {
                 if (existingSet.Contains(md.MatchDay)) continue;
 
+                var (start, deadline, end) = GetGameweekWindow(md.FirstMatchDate);
+
                 _db.FantasyGameweeks.Add(new FantasyGameweek
                 {
                     GameWeek      = md.MatchDay,
-                    StartDate     = md.StartDate.Date,
-                    EndDate       = md.EndDate.Date.AddDays(1),
-                    Deadline      = md.StartDate.AddHours(-1),
-                    IsLocked      = md.StartDate <= DateTime.UtcNow,
-                    IsCompleted   = md.EndDate   <  DateTime.UtcNow.AddDays(-1),
+                    StartDate     = start,
+                    EndDate       = end,
+                    Deadline      = deadline,
+                    IsLocked      = deadline <= DateTime.UtcNow,
+                    IsCompleted   = end      <  DateTime.UtcNow,
                     CreatedAt     = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow,
                 });
@@ -369,6 +371,75 @@ namespace BPFL.API.Features.Fantasy
                 await _db.SaveChangesAsync(ct);
                 _logger.LogInformation("Auto-created {Count} fantasy gameweeks", created);
             }
+        }
+
+        /// <summary>
+        /// Creates the next gameweek manually based on upcoming matches.
+        /// Used by the Admin "Advance Gameweek" button.
+        /// Returns the new gameweek number, or null if nothing to create.
+        /// </summary>
+        public async Task<int?> AdvanceGameweekAsync(CancellationToken ct = default)
+        {
+            var lastGw = await _db.FantasyGameweeks
+                .OrderByDescending(g => g.GameWeek)
+                .FirstOrDefaultAsync(ct);
+
+            int nextNumber = (lastGw?.GameWeek ?? 0) + 1;
+
+            // Find the next matchday after the last one we have a gameweek for
+            var nextMatchday = await _db.Matches.AsNoTracking()
+                .Where(m => m.MatchDay != null && m.MatchDay >= nextNumber)
+                .GroupBy(m => m.MatchDay!.Value)
+                .Select(g => new
+                {
+                    MatchDay       = g.Key,
+                    FirstMatchDate = g.Min(m => m.MatchDate),
+                    LastMatchDate  = g.Max(m => m.MatchDate),
+                })
+                .OrderBy(g => g.MatchDay)
+                .FirstOrDefaultAsync(ct);
+
+            if (nextMatchday == null) return null;
+
+            var (start, deadline, end) = GetGameweekWindow(nextMatchday.FirstMatchDate);
+
+            _db.FantasyGameweeks.Add(new FantasyGameweek
+            {
+                GameWeek      = nextMatchday.MatchDay,
+                StartDate     = start,
+                EndDate       = end,
+                Deadline      = deadline,
+                IsLocked      = false,
+                IsCompleted   = false,
+                CreatedAt     = DateTime.UtcNow,
+                LastUpdatedAt = DateTime.UtcNow,
+            });
+
+            await _db.SaveChangesAsync(ct);
+            _logger.LogInformation("Advanced to fantasy gameweek {GW} ({Start} → {End})",
+                nextMatchday.MatchDay, start, end);
+
+            return nextMatchday.MatchDay;
+        }
+
+        /// <summary>
+        /// Calculates the Friday-to-Tuesday window for a gameweek based on the first match date.
+        /// Start  = Friday 12:00 UTC (the Friday before the first match of that matchday)
+        /// Deadline = Friday 19:00 UTC
+        /// End    = Following Tuesday 05:00 UTC
+        /// </summary>
+        private static (DateTime start, DateTime deadline, DateTime end) GetGameweekWindow(DateTime firstMatch)
+        {
+            // Walk back to the nearest Friday (or stay on Friday if the first match IS a Friday)
+            var friday = firstMatch.Date;
+            while (friday.DayOfWeek != DayOfWeek.Friday)
+                friday = friday.AddDays(-1);
+
+            var start    = DateTime.SpecifyKind(friday.AddHours(12), DateTimeKind.Utc);   // Fri 12:00
+            var deadline = DateTime.SpecifyKind(friday.AddHours(19), DateTimeKind.Utc);   // Fri 19:00
+            var end      = DateTime.SpecifyKind(friday.AddDays(4).AddHours(5), DateTimeKind.Utc); // Tue 05:00
+
+            return (start, deadline, end);
         }
 
         // ── Match stats sync via Sportmonks ──────────────────────────

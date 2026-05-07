@@ -155,6 +155,20 @@ namespace BPFL.API.Features.Fantasy
             return Ok(new { message = $"Scores calculated for gameweek {gameweekId}." });
         }
 
+        /// <summary>
+        /// POST /Fantasy/admin/gameweek/advance
+        /// Creates the next gameweek automatically with Friday 12:00 → Tuesday 05:00 window.
+        /// </summary>
+        [HttpPost("admin/gameweek/advance")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AdvanceGameweek(CancellationToken ct = default)
+        {
+            var gw = await _autoSync.AdvanceGameweekAsync(ct);
+            return gw == null
+                ? Ok(new { message = "No upcoming matchday found to create a gameweek for." })
+                : Ok(new { message = $"Gameweek {gw} created (Fri 12:00 → Tue 05:00 UTC)." });
+        }
+
         [HttpPost("admin/recalc-prices")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RecalcPrices(CancellationToken ct = default)
