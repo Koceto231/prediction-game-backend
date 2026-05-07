@@ -424,9 +424,28 @@ namespace BPFL.API.Features.Fantasy
             var byDate = upcomingMatches.FirstOrDefault(m =>
                 !existingWindows.Any(g => m.MatchDate >= g.StartDate && m.MatchDate <= g.EndDate));
 
-            if (byDate == null) return null;
+            if (byDate != null)
+                return await CreateGameweekEntryAsync(nextNumber, byDate.MatchDate, ct);
 
-            return await CreateGameweekEntryAsync(nextNumber, byDate.MatchDate, ct);
+            // Strategy 3: no matches in DB at all — create a gameweek starting from
+            // the next upcoming Friday so the admin can sync matches into it later.
+            _logger.LogWarning(
+                "No upcoming matches found for GW{Next}. Creating placeholder gameweek from current date.",
+                nextNumber);
+            return await CreateGameweekEntryAsync(nextNumber, DateTime.UtcNow, ct);
+        }
+
+        /// <summary>
+        /// Create a gameweek for a specific date anchor (used by admin manual override).
+        /// </summary>
+        public async Task<int> ForceCreateGameweekAsync(DateTime anchorDate, CancellationToken ct = default)
+        {
+            var lastGw = await _db.FantasyGameweeks
+                .OrderByDescending(g => g.GameWeek)
+                .FirstOrDefaultAsync(ct);
+
+            int nextNumber = (lastGw?.GameWeek ?? 0) + 1;
+            return await CreateGameweekEntryAsync(nextNumber, anchorDate, ct);
         }
 
         private async Task<int> CreateGameweekEntryAsync(int gwNumber, DateTime firstMatch, CancellationToken ct)

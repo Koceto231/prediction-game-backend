@@ -169,6 +169,22 @@ namespace BPFL.API.Features.Fantasy
                 : Ok(new { message = $"Gameweek {gw} created (Fri 12:00 → Tue 05:00 UTC)." });
         }
 
+        /// <summary>
+        /// POST /Fantasy/admin/gameweek/force?anchorDate=2026-05-10
+        /// Creates the next gameweek anchored to the given date (or today if omitted),
+        /// regardless of whether matches exist in the DB.
+        /// </summary>
+        [HttpPost("admin/gameweek/force")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> ForceCreateGameweek(
+            [FromQuery] DateTime? anchorDate = null,
+            CancellationToken ct = default)
+        {
+            var anchor = anchorDate?.ToUniversalTime() ?? DateTime.UtcNow;
+            var gw = await _autoSync.ForceCreateGameweekAsync(anchor, ct);
+            return Ok(new { message = $"Gameweek {gw} created (anchor: {anchor:yyyy-MM-dd})." });
+        }
+
         [HttpPost("admin/recalc-prices")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RecalcPrices(CancellationToken ct = default)
