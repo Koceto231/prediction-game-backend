@@ -65,8 +65,8 @@ namespace BPFL.API.Features.Fantasy
             var gameweek = await _db.FantasyGameweeks
                 .AsNoTracking()
                 .Where(g => !g.IsCompleted)
-                .OrderBy(g => g.IsLocked)   // false (0) sorts before true (1)
-                .ThenBy(g => g.GameWeek)
+                .OrderBy(g => g.IsLocked)          // false (0) sorts before true (1) — active first
+                .ThenByDescending(g => g.GameWeek) // among active, pick the latest GW number
                 .FirstOrDefaultAsync(ct);
 
             if (gameweek == null) return null;
@@ -95,6 +95,7 @@ namespace BPFL.API.Features.Fantasy
 
             _db.FantasyGameweeks.Add(gw);
             await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(CurrentGameweekKey, ct); // new GW → invalidate cache
             return MapGameweek(gw);
         }
 
@@ -342,8 +343,8 @@ namespace BPFL.API.Features.Fantasy
         {
             var gameweek = await _db.FantasyGameweeks.AsNoTracking()
                 .Where(g => !g.IsCompleted)
-                .OrderBy(g => g.IsLocked)   // non-locked (active) first
-                .ThenBy(g => g.GameWeek)
+                .OrderBy(g => g.IsLocked)          // non-locked (active) first
+                .ThenByDescending(g => g.GameWeek) // among active, pick the latest GW
                 .FirstOrDefaultAsync(ct);
 
             if (gameweek == null) return null;

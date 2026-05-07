@@ -7,10 +7,13 @@ namespace BPFL.API.Features.Fantasy
 {
     public class FantasyAutoSyncService
     {
+        private const string CurrentGameweekKey = "fantasy:gameweek:current";
+
         private readonly BPFL_DBContext _db;
         private readonly BPFLDataClient _dataClient;
         private readonly SportmonksClient _sportmonks;
         private readonly FantasyServices _fantasyServices;
+        private readonly IAppCache _cache;
         private readonly ILogger<FantasyAutoSyncService> _logger;
 
         public FantasyAutoSyncService(
@@ -18,12 +21,14 @@ namespace BPFL.API.Features.Fantasy
             BPFLDataClient dataClient,
             SportmonksClient sportmonks,
             FantasyServices fantasyServices,
+            IAppCache cache,
             ILogger<FantasyAutoSyncService> logger)
         {
             _db = db;
             _dataClient = dataClient;
             _sportmonks = sportmonks;
             _fantasyServices = fantasyServices;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -494,6 +499,7 @@ namespace BPFL.API.Features.Fantasy
             });
 
             await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(CurrentGameweekKey, ct); // new GW → force fresh fetch
             _logger.LogInformation("Created fantasy gameweek {GW}: {Start} → {End}", gwNumber, start, end);
             return gwNumber;
         }
