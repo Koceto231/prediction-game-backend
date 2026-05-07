@@ -72,12 +72,26 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
 
-        // Read JWT from HttpOnly cookie instead of Authorization header
+        // Accept token from HttpOnly cookie OR Authorization: Bearer header.
+        // Cookie is preferred; Bearer header is the fallback for browsers that
+        // block cross-origin cookies (Safari ITP, Brave, Chrome privacy mode).
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = ctx =>
             {
-                ctx.Token = ctx.Request.Cookies["access_token"];
+                // 1. Try cookie first (most secure)
+                var cookie = ctx.Request.Cookies["access_token"];
+                if (!string.IsNullOrWhiteSpace(cookie))
+                {
+                    ctx.Token = cookie;
+                    return Task.CompletedTask;
+                }
+
+                // 2. Fall back to Authorization: Bearer header
+                var authHeader = ctx.Request.Headers["Authorization"].FirstOrDefault();
+                if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)
+                    ctx.Token = authHeader["Bearer ".Length..].Trim();
+
                 return Task.CompletedTask;
             }
         };

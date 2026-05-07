@@ -49,7 +49,9 @@ namespace BPFL.API.Features.Auth
                 return Unauthorized(new { message = result.Error });
 
             SetTokenCookies(result.Tokens!.AccessToken, result.Tokens.RefreshToken);
-            return Ok(result.User);   // only user info — tokens are in HttpOnly cookies
+            // Also return access token in body so clients that can't use
+            // cross-origin cookies (Safari ITP, Brave, etc.) can use Bearer auth.
+            return Ok(new { user = result.User, accessToken = result.Tokens.AccessToken });
         }
 
         // ── Google login ──────────────────────────────────────────────
@@ -66,7 +68,7 @@ namespace BPFL.API.Features.Auth
                 return Unauthorized(new { message = result.Error });
 
             SetTokenCookies(result.Tokens!.AccessToken, result.Tokens.RefreshToken);
-            return Ok(result.User);
+            return Ok(new { user = result.User, accessToken = result.Tokens.AccessToken });
         }
 
         // ── Refresh ───────────────────────────────────────────────────
@@ -86,7 +88,7 @@ namespace BPFL.API.Features.Auth
             }
 
             SetTokenCookies(result.Tokens!.AccessToken, result.Tokens.RefreshToken);
-            return Ok(new { message = "Token refreshed." });
+            return Ok(new { accessToken = result.Tokens.AccessToken });
         }
 
         // ── Logout ────────────────────────────────────────────────────
