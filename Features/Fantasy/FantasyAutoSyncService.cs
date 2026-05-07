@@ -386,26 +386,43 @@ namespace BPFL.API.Features.Fantasy
 
             int nextNumber = (lastGw?.GameWeek ?? 0) + 1;
 
-            // Find the next matchday after the last one we have a gameweek for
-            var nextMatchday = await _db.Matches.AsNoTracking()
+            // Strategy 1: find by MatchDay number
+            var byMatchday = await _db.Matches.AsNoTracking()
                 .Where(m => m.MatchDay != null && m.MatchDay >= nextNumber)
                 .GroupBy(m => m.MatchDay!.Value)
                 .Select(g => new
                 {
                     MatchDay       = g.Key,
                     FirstMatchDate = g.Min(m => m.MatchDate),
-                    LastMatchDate  = g.Max(m => m.MatchDate),
                 })
                 .OrderBy(g => g.MatchDay)
                 .FirstOrDefaultAsync(ct);
 
-            if (nextMatchday == null) return null;
+            if (byMatchday != null)
+            {
+                return await CreateGameweekEntryAsync(byMatchday.MatchDay, byMatchday.FirstMatchDate, ct);
+            }
 
-            var (start, deadline, end) = GetGameweekWindow(nextMatchday.FirstMatchDate);
+            // Strategy 2: find by date — next upcoming matches after last GW EndDate
+            var afterDate = lastGw?.EndDate ?? DateTime.UtcNow;
+            var byDate = await _db.Matches.AsNoTracking()
+                .Where(m => m.MatchDate > afterDate && m.Status != "FINISHED")
+                .OrderBy(m => m.MatchDate)
+                .Select(m => new { m.MatchDate, m.MatchDay })
+                .FirstOrDefaultAsync(ct);
+
+            if (byDate == null) return null;
+
+            return await CreateGameweekEntryAsync(nextNumber, byDate.MatchDate, ct);
+        }
+
+        private async Task<int> CreateGameweekEntryAsync(int gwNumber, DateTime firstMatch, CancellationToken ct)
+        {
+            var (start, deadline, end) = GetGameweekWindow(firstMatch);
 
             _db.FantasyGameweeks.Add(new FantasyGameweek
             {
-                GameWeek      = nextMatchday.MatchDay,
+                GameWeek      = gwNumber,
                 StartDate     = start,
                 EndDate       = end,
                 Deadline      = deadline,
@@ -416,10 +433,8 @@ namespace BPFL.API.Features.Fantasy
             });
 
             await _db.SaveChangesAsync(ct);
-            _logger.LogInformation("Advanced to fantasy gameweek {GW} ({Start} → {End})",
-                nextMatchday.MatchDay, start, end);
-
-            return nextMatchday.MatchDay;
+            _logger.LogInformation("Created fantasy gameweek {GW}: {Start} → {End}", gwNumber, start, end);
+            return gwNumber;
         }
 
         /// <summary>
