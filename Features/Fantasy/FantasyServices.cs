@@ -348,7 +348,40 @@ namespace BPFL.API.Features.Fantasy
 
             if (gameweek == null) return null;
 
-            return await GetMyFantasyTeamAsync(userId, gameweek.Id, ct);
+            var result = await GetMyFantasyTeamAsync(userId, gameweek.Id, ct);
+
+            // If the current GW has no selections yet, show the squad from the
+            // most recent GW that does have selections (carry-over display).
+            if (result != null && result.Players.Count == 0)
+            {
+                var team = await _db.FantasyTeams.AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.UserId == userId, ct);
+
+                if (team != null)
+                {
+                    var latestGwId = await _db.FantasyTeamSelections.AsNoTracking()
+                        .Where(s => s.FantasyTeamId == team.Id)
+                        .OrderByDescending(s => s.FantasyGameweekId)
+                        .Select(s => (int?)s.FantasyGameweekId)
+                        .FirstOrDefaultAsync(ct);
+
+                    if (latestGwId.HasValue && latestGwId.Value != gameweek.Id)
+                    {
+                        var carryOver = await GetMyFantasyTeamAsync(userId, latestGwId.Value, ct);
+                        if (carryOver != null && carryOver.Players.Count > 0)
+                        {
+                            // Return under the current GW's identity so deadline/lock shows correctly
+                            carryOver.FantasyGameweekId = gameweek.Id;
+                            carryOver.GameWeek          = gameweek.GameWeek;
+                            carryOver.IsLocked          = gameweek.IsLocked;
+                            carryOver.WeeklyPoints      = 0;
+                            return carryOver;
+                        }
+                    }
+                }
+            }
+
+            return result;
         }
 
         // ── Leaderboard ───────────────────────────────────────────────
