@@ -60,10 +60,13 @@ namespace BPFL.API.Features.Fantasy
             var cached = await _cache.GetAsync<FantasyGameweekResponseDTO>(CurrentGameweekKey, ct);
             if (cached != null) return cached;
 
+            // Prefer active (non-locked) gameweeks first so a freshly-created GW30
+            // is returned instead of a locked-but-not-completed GW29.
             var gameweek = await _db.FantasyGameweeks
                 .AsNoTracking()
                 .Where(g => !g.IsCompleted)
-                .OrderBy(g => g.GameWeek)
+                .OrderBy(g => g.IsLocked)   // false (0) sorts before true (1)
+                .ThenBy(g => g.GameWeek)
                 .FirstOrDefaultAsync(ct);
 
             if (gameweek == null) return null;
@@ -339,7 +342,8 @@ namespace BPFL.API.Features.Fantasy
         {
             var gameweek = await _db.FantasyGameweeks.AsNoTracking()
                 .Where(g => !g.IsCompleted)
-                .OrderBy(g => g.GameWeek)
+                .OrderBy(g => g.IsLocked)   // non-locked (active) first
+                .ThenBy(g => g.GameWeek)
                 .FirstOrDefaultAsync(ct);
 
             if (gameweek == null) return null;
@@ -384,6 +388,30 @@ namespace BPFL.API.Features.Fantasy
 
             await _cache.SetAsync(cacheKey, result, LeaderboardTtl, ct);
             return result;
+        }
+
+        // ── Admin: complete / lock gameweek ──────────────────────────
+
+        public async Task CompleteGameweekAsync(int gameweekId, CancellationToken ct = default)
+        {
+            var gw = await _db.FantasyGameweeks
+                .FirstOrDefaultAsync(g => g.Id == gameweekId, ct)
+                ?? throw new KeyNotFoundException($"Gameweek {gameweekId} not found.");
+
+            gw.IsCompleted    = true;
+            gw.IsLocked       = true;
+            gw.LastUpdatedAt  = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(CurrentGameweekKey, ct);
+        }
+
+        public async Task<List<FantasyGameweekResponseDTO>> GetAllGameweeksAsync(CancellationToken ct = default)
+        {
+            var gws = await _db.FantasyGameweeks
+                .AsNoTracking()
+                .OrderBy(g => g.GameWeek)
+                .ToListAsync(ct);
+            return gws.Select(MapGameweek).ToList();
         }
 
         // ── Admin: player stats ───────────────────────────────────────

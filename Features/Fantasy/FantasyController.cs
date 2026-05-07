@@ -174,6 +174,31 @@ namespace BPFL.API.Features.Fantasy
         /// Creates the next gameweek anchored to the given date (or today if omitted),
         /// regardless of whether matches exist in the DB.
         /// </summary>
+        /// <summary>GET /Fantasy/admin/gameweeks — list all gameweeks (for admin UI)</summary>
+        [HttpGet("admin/gameweeks")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAllGameweeks(CancellationToken ct = default)
+        {
+            var result = await _fantasy.GetAllGameweeksAsync(ct);
+            return Ok(result);
+        }
+
+        /// <summary>POST /Fantasy/admin/gameweek/{id}/complete — mark GW as completed</summary>
+        [HttpPost("admin/gameweek/{id:int}/complete")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> CompleteGameweek(int id, CancellationToken ct = default)
+        {
+            try
+            {
+                await _fantasy.CompleteGameweekAsync(id, ct);
+                return Ok(new { message = $"Gameweek {id} marked as completed." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("admin/gameweek/force")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ForceCreateGameweek(
