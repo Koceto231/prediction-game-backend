@@ -386,7 +386,13 @@ namespace BPFL.API.Features.Fantasy
 
             int nextNumber = (lastGw?.GameWeek ?? 0) + 1;
 
-            // Strategy 1: find by MatchDay number
+            // Load all existing GW windows so we can skip covered matches
+            var existingWindows = await _db.FantasyGameweeks.AsNoTracking()
+                .Select(g => new { g.GameWeek, g.StartDate, g.EndDate })
+                .ToListAsync(ct);
+            var coveredMatchdays = new HashSet<int>(existingWindows.Select(g => g.GameWeek));
+
+            // Strategy 1: find the next MatchDay not yet covered
             var byMatchday = await _db.Matches.AsNoTracking()
                 .Where(m => m.MatchDay != null && m.MatchDay >= nextNumber)
                 .GroupBy(m => m.MatchDay!.Value)
@@ -398,18 +404,25 @@ namespace BPFL.API.Features.Fantasy
                 .OrderBy(g => g.MatchDay)
                 .FirstOrDefaultAsync(ct);
 
-            if (byMatchday != null)
+            if (byMatchday != null && !coveredMatchdays.Contains(byMatchday.MatchDay))
             {
                 return await CreateGameweekEntryAsync(byMatchday.MatchDay, byMatchday.FirstMatchDate, ct);
             }
 
-            // Strategy 2: find by date — next upcoming matches after last GW EndDate
-            var afterDate = lastGw?.EndDate ?? DateTime.UtcNow;
-            var byDate = await _db.Matches.AsNoTracking()
-                .Where(m => m.MatchDate > afterDate && m.Status != "FINISHED")
+            // Strategy 2: find any upcoming match not already inside an existing GW window.
+            // NOTE: do NOT use lastGw.EndDate as the lower bound — the current GW window
+            // often extends past the next batch of fixtures (e.g. GW29 ends next Tuesday
+            // but GW30 matches kick off this Saturday).
+            var now = DateTime.UtcNow;
+            var upcomingMatches = await _db.Matches.AsNoTracking()
+                .Where(m => m.MatchDate > now && m.Status != "FINISHED")
                 .OrderBy(m => m.MatchDate)
                 .Select(m => new { m.MatchDate, m.MatchDay })
-                .FirstOrDefaultAsync(ct);
+                .Take(50)
+                .ToListAsync(ct);
+
+            var byDate = upcomingMatches.FirstOrDefault(m =>
+                !existingWindows.Any(g => m.MatchDate >= g.StartDate && m.MatchDate <= g.EndDate));
 
             if (byDate == null) return null;
 
