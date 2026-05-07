@@ -438,14 +438,43 @@ namespace BPFL.API.Features.Fantasy
         /// <summary>
         /// Create a gameweek for a specific date anchor (used by admin manual override).
         /// </summary>
-        public async Task<int> ForceCreateGameweekAsync(DateTime anchorDate, CancellationToken ct = default)
+        public async Task<int> ForceCreateGameweekAsync(
+            DateTime anchorDate,
+            int? gwNumber = null,
+            DateTime? deadline = null,
+            CancellationToken ct = default)
         {
             var lastGw = await _db.FantasyGameweeks
                 .OrderByDescending(g => g.GameWeek)
                 .FirstOrDefaultAsync(ct);
 
-            int nextNumber = (lastGw?.GameWeek ?? 0) + 1;
-            return await CreateGameweekEntryAsync(nextNumber, anchorDate, ct);
+            int number = gwNumber ?? ((lastGw?.GameWeek ?? 0) + 1);
+
+            // If a custom deadline is provided, build the window around it
+            // rather than using the auto-calculated Friday window.
+            if (deadline.HasValue)
+            {
+                var dl  = DateTime.SpecifyKind(deadline.Value, DateTimeKind.Utc);
+                var start = dl.AddDays(-3);                    // 3 days before deadline
+                var end   = dl.AddDays(4).Date.AddHours(10);  // Monday 10:00 after deadline
+
+                _db.FantasyGameweeks.Add(new FantasyGameweek
+                {
+                    GameWeek      = number,
+                    StartDate     = start,
+                    EndDate       = end,
+                    Deadline      = dl,
+                    IsLocked      = false,
+                    IsCompleted   = false,
+                    CreatedAt     = DateTime.UtcNow,
+                    LastUpdatedAt = DateTime.UtcNow,
+                });
+                await _db.SaveChangesAsync(ct);
+                _logger.LogInformation("Force-created gameweek {GW} with custom deadline {DL}", number, dl);
+                return number;
+            }
+
+            return await CreateGameweekEntryAsync(number, anchorDate, ct);
         }
 
         private async Task<int> CreateGameweekEntryAsync(int gwNumber, DateTime firstMatch, CancellationToken ct)

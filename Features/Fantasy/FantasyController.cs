@@ -218,11 +218,13 @@ namespace BPFL.API.Features.Fantasy
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ForceCreateGameweek(
             [FromQuery] DateTime? anchorDate = null,
+            [FromQuery] int? gwNumber = null,
+            [FromQuery] DateTime? deadline = null,
             CancellationToken ct = default)
         {
             var anchor = anchorDate?.ToUniversalTime() ?? DateTime.UtcNow;
-            var gw = await _autoSync.ForceCreateGameweekAsync(anchor, ct);
-            return Ok(new { message = $"Gameweek {gw} created (anchor: {anchor:yyyy-MM-dd})." });
+            var gw = await _autoSync.ForceCreateGameweekAsync(anchor, gwNumber, deadline?.ToUniversalTime(), ct);
+            return Ok(new { message = $"Gameweek {gw} created." });
         }
 
         [HttpPost("admin/recalc-prices")]
