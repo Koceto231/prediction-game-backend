@@ -423,21 +423,26 @@ namespace BPFL.API.Features.Fantasy
         }
 
         /// <summary>
-        /// Calculates the Friday-to-Tuesday window for a gameweek based on the first match date.
-        /// Start  = Friday 12:00 UTC (the Friday before the first match of that matchday)
-        /// Deadline = Friday 19:00 UTC
-        /// End    = Following Tuesday 05:00 UTC
+        /// Calculates the gameweek window based on the first match date.
+        ///
+        /// Cycle (one week):
+        ///   Start    = Tuesday 10:00 UTC  — gameweek opens, team changes allowed
+        ///   Deadline = Friday  10:00 UTC  — locked, no more changes
+        ///   End      = Tuesday 10:00 UTC  — gameweek closes, scores calculated
         /// </summary>
         private static (DateTime start, DateTime deadline, DateTime end) GetGameweekWindow(DateTime firstMatch)
         {
-            // Walk back to the nearest Friday (or stay on Friday if the first match IS a Friday)
+            // Walk back to the nearest Friday (matches kick off on or after Friday)
             var friday = firstMatch.Date;
             while (friday.DayOfWeek != DayOfWeek.Friday)
                 friday = friday.AddDays(-1);
 
-            var start    = DateTime.SpecifyKind(friday.AddHours(12), DateTimeKind.Utc);   // Fri 12:00
-            var deadline = DateTime.SpecifyKind(friday.AddHours(19), DateTimeKind.Utc);   // Fri 19:00
-            var end      = DateTime.SpecifyKind(friday.AddDays(4).AddHours(5), DateTimeKind.Utc); // Tue 05:00
+            // Tuesday before that Friday = 3 days earlier
+            var tuesday = friday.AddDays(-3);
+
+            var start    = DateTime.SpecifyKind(tuesday.AddHours(10), DateTimeKind.Utc);        // Tue 10:00
+            var deadline = DateTime.SpecifyKind(friday.AddHours(10), DateTimeKind.Utc);         // Fri 10:00
+            var end      = DateTime.SpecifyKind(tuesday.AddDays(7).AddHours(10), DateTimeKind.Utc); // Tue+7 10:00
 
             return (start, deadline, end);
         }
