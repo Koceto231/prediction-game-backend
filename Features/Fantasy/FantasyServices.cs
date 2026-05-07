@@ -470,6 +470,29 @@ namespace BPFL.API.Features.Fantasy
 
         // ── Admin: complete / lock gameweek ──────────────────────────
 
+        public async Task EditGameweekAsync(int gameweekId, int? gwNumber, DateTime? deadline, CancellationToken ct = default)
+        {
+            var gw = await _db.FantasyGameweeks
+                .FirstOrDefaultAsync(g => g.Id == gameweekId, ct)
+                ?? throw new KeyNotFoundException($"Gameweek {gameweekId} not found.");
+
+            if (gwNumber.HasValue)
+                gw.GameWeek = gwNumber.Value;
+
+            if (deadline.HasValue)
+            {
+                var dl    = DateTime.SpecifyKind(deadline.Value, DateTimeKind.Utc);
+                gw.Deadline   = dl;
+                gw.StartDate  = dl.AddDays(-3);
+                gw.EndDate    = dl.AddDays(4).Date.AddHours(10);
+                gw.IsLocked   = dl <= DateTime.UtcNow;
+            }
+
+            gw.LastUpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await _cache.RemoveAsync(CurrentGameweekKey, ct);
+        }
+
         public async Task CompleteGameweekAsync(int gameweekId, CancellationToken ct = default)
         {
             var gw = await _db.FantasyGameweeks

@@ -198,6 +198,23 @@ namespace BPFL.API.Features.Fantasy
             return Ok(result);
         }
 
+        /// <summary>PATCH /Fantasy/admin/gameweek/{id} — edit GW number and/or deadline</summary>
+        [HttpPatch("admin/gameweek/{id:int}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> EditGameweek(
+            int id,
+            [FromQuery] int? gwNumber = null,
+            [FromQuery] DateTime? deadline = null,
+            CancellationToken ct = default)
+        {
+            try
+            {
+                await _fantasy.EditGameweekAsync(id, gwNumber, deadline?.ToUniversalTime(), ct);
+                return Ok(new { message = $"Gameweek {id} updated." });
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        }
+
         /// <summary>POST /Fantasy/admin/gameweek/{id}/complete — mark GW as completed</summary>
         [HttpPost("admin/gameweek/{id:int}/complete")]
         [Authorize(Roles = "Admin")]
