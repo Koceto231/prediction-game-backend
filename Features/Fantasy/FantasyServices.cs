@@ -390,6 +390,51 @@ namespace BPFL.API.Features.Fantasy
             return result;
         }
 
+        // ── Latest squad (carry-over for draft) ──────────────────────
+
+        /// <summary>
+        /// Returns the player list + captain from the user's most recent
+        /// selection (any GW). Used by the draft page to pre-populate the
+        /// pitch when the current GW has no selection yet.
+        /// </summary>
+        public async Task<(List<FantasyPlayerResponseDTO> Players, int? CaptainId)>
+            GetLatestSquadAsync(int userId, CancellationToken ct = default)
+        {
+            var team = await _db.FantasyTeams.AsNoTracking()
+                .FirstOrDefaultAsync(t => t.UserId == userId, ct);
+            if (team == null) return (new(), null);
+
+            // Find the most recent GW that has selections
+            var latestGwId = await _db.FantasyTeamSelections.AsNoTracking()
+                .Where(s => s.FantasyTeamId == team.Id)
+                .OrderByDescending(s => s.FantasyGameweekId)
+                .Select(s => (int?)s.FantasyGameweekId)
+                .FirstOrDefaultAsync(ct);
+
+            if (latestGwId == null) return (new(), null);
+
+            var selections = await _db.FantasyTeamSelections.AsNoTracking()
+                .Where(s => s.FantasyTeamId == team.Id && s.FantasyGameweekId == latestGwId)
+                .Include(s => s.FantasyPlayer).ThenInclude(p => p.Team)
+                .ToListAsync(ct);
+
+            int? captainId = selections.FirstOrDefault(s => s.IsCaptain)?.FantasyPlayerId;
+
+            var players = selections.Select(s => new FantasyPlayerResponseDTO
+            {
+                Id         = s.FantasyPlayer.Id,
+                Name       = s.FantasyPlayer.Name,
+                Position   = s.FantasyPlayer.Position.ToString(),
+                TeamId     = s.FantasyPlayer.TeamId,
+                TeamName   = s.FantasyPlayer.Team?.Name ?? "",
+                Price      = s.FantasyPlayer.Price,
+                PhotoUrl   = s.FantasyPlayer.PhotoUrl,
+                LeagueCode = s.FantasyPlayer.Team?.LeagueCode,
+            }).ToList();
+
+            return (players, captainId);
+        }
+
         // ── Admin: complete / lock gameweek ──────────────────────────
 
         public async Task CompleteGameweekAsync(int gameweekId, CancellationToken ct = default)

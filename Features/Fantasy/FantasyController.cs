@@ -67,6 +67,21 @@ namespace BPFL.API.Features.Fantasy
             return Ok(result);
         }
 
+        /// <summary>
+        /// GET /Fantasy/team/squad
+        /// Returns the user's most recent squad selection (players + captainId)
+        /// regardless of which GW it was for. Used by the draft page for carry-over.
+        /// </summary>
+        [HttpGet("team/squad")]
+        public async Task<IActionResult> GetLatestSquad(CancellationToken ct = default)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+
+            var (players, captainId) = await _fantasy.GetLatestSquadAsync(userId.Value, ct);
+            return Ok(new { players, captainId });
+        }
+
         /// <summary>Get my team for a specific gameweek.</summary>
         [HttpGet("team/{gameweekId:int}")]
         public async Task<IActionResult> GetMyTeam(int gameweekId, CancellationToken ct = default)
